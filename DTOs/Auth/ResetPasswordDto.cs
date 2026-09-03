@@ -1,6 +1,7 @@
-﻿namespace Event_Parking_Reservation.DTOs.Auth
+namespace EventParkingReservation.DTOs.Auth
 {
     public class ResetPasswordDto
     {
     }
 }
+

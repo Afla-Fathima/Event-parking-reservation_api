@@ -1,25 +1,16 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace EventParkingReservation.DTOs.Seat
 {
     public class CreateSeatDto
     {
         [Required]
-        [Range(1, int.MaxValue)]
-        public int EventId { get; set; }
+        public string SeatNumber { get; set; } = string.Empty;
 
         [Required]
-        [StringLength(20)]
-        public string SeatNumber { get; set; }
-            = string.Empty;
+        public string SeatType { get; set; } = "Regular";
 
-        [Required]
-        [StringLength(50)]
-        public string SeatType { get; set; }
-            = string.Empty;
-
-        [Required]
-        [Range(0.01, 1000000)]
+        [Range(0.01, double.MaxValue)]
         public decimal Price { get; set; }
     }
 }

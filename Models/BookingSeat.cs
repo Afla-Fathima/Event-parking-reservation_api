@@ -1,31 +1,26 @@
-﻿using System.Text.Json.Serialization;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace EventParkingReservation.Models
 {
     public class BookingSeat
     {
+        [Key]
         public int BookingSeatId { get; set; }
 
         public int BookingId { get; set; }
 
         public int SeatId { get; set; }
 
+        [Column(TypeName = "decimal(18,2)")]
         public decimal SeatPrice { get; set; }
 
-        public string Status { get; set; }
-            = "Reserved";
+        [Required]
+        [MaxLength(20)]
+        public string Status { get; set; } = "Active";
 
-        public DateTime CreatedDate { get; set; }
-            = DateTime.Now;
+        public Booking? Booking { get; set; }
 
-
-        // Prevent BookingSeat -> Booking -> BookingSeats
-        [JsonIgnore]
-        public Booking Booking { get; set; }
-            = null!;
-
-
-        public Seat Seat { get; set; }
-            = null!;
+        public Seat? Seat { get; set; }
     }
 }

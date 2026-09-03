@@ -1,4 +1,3 @@
-﻿
 using EventParkingReservation.DTOs.Seat;
 using EventParkingReservation.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -6,9 +5,10 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EventParkingReservation.Controllers
 {
-    [Route("api/[controller]")]
     [ApiController]
-    public class SeatController : ControllerBase
+    [Route("api/events/{eventId:int}/seats")]
+    public class SeatController :
+        ControllerBase
     {
         private readonly ISeatService _service;
 
@@ -18,72 +18,50 @@ namespace EventParkingReservation.Controllers
             _service = service;
         }
 
-
-        // ==========================================
-        // GET: api/Seat/event/1
-        // ==========================================
-
-        [HttpGet("event/{eventId:int}")]
+        [HttpGet]
         public async Task<IActionResult>
             GetByEvent(int eventId)
         {
-            var seats =
-                await _service
-                    .GetByEventIdAsync(eventId);
-
-            return Ok(seats);
-        }
-
-
-        // ==========================================
-        // GET: api/Seat/1
-        // ==========================================
-
-        [HttpGet("{id:int}")]
-        public async Task<IActionResult>
-            GetById(int id)
-        {
-            var seat =
-                await _service
-                    .GetByIdAsync(id);
-
-            if (seat == null)
+            try
+            {
+                return Ok(
+                    await _service
+                        .GetByEventAsync(
+                            eventId));
+            }
+            catch (KeyNotFoundException ex)
             {
                 return NotFound(new
                 {
-                    message = "Seat not found"
+                    message = ex.Message
                 });
             }
-
-            return Ok(seat);
         }
-
-
-        // ==========================================
-        // POST: api/Seat
-        // Admin Only
-        // ==========================================
 
         [HttpPost]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult>
-            Create(CreateSeatDto dto)
+            Create(
+                int eventId,
+                CreateSeatDto dto)
         {
             try
             {
-                var seat =
+                var result =
                     await _service
-                        .AddAsync(dto);
+                        .CreateAsync(
+                            eventId,
+                            dto);
 
-                return CreatedAtAction(
-                    nameof(GetById),
-                    new
-                    {
-                        id = seat.SeatId
-                    },
-                    seat);
+                return StatusCode(
+                    StatusCodes
+                        .Status201Created,
+                    result);
             }
-            catch (InvalidOperationException ex)
+            catch (Exception ex)
+                when (
+                    ex is KeyNotFoundException ||
+                    ex is InvalidOperationException)
             {
                 return BadRequest(new
                 {
@@ -92,32 +70,22 @@ namespace EventParkingReservation.Controllers
             }
         }
 
-
-        // ==========================================
-        // PUT: api/Seat/1
-        // Admin Only
-        // ==========================================
-
-        [HttpPut("{id:int}")]
+        [HttpPut("{seatId:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult>
             Update(
-                int id,
+                int eventId,
+                int seatId,
                 UpdateSeatDto dto)
         {
             try
             {
-                var seat =
+                return Ok(
                     await _service
-                        .UpdateAsync(id, dto);
-
-                return Ok(new
-                {
-                    message =
-                        "Seat updated successfully",
-
-                    data = seat
-                });
+                        .UpdateAsync(
+                            eventId,
+                            seatId,
+                            dto));
             }
             catch (KeyNotFoundException ex)
             {
@@ -128,34 +96,28 @@ namespace EventParkingReservation.Controllers
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new
+                return Conflict(new
                 {
                     message = ex.Message
                 });
             }
         }
 
-
-        // ==========================================
-        // DELETE: api/Seat/1
-        // Admin Only
-        // ==========================================
-
-        [HttpDelete("{id:int}")]
+        [HttpDelete("{seatId:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult>
-            Delete(int id)
+            Delete(
+                int eventId,
+                int seatId)
         {
             try
             {
                 await _service
-                    .DeleteAsync(id);
+                    .DeleteAsync(
+                        eventId,
+                        seatId);
 
-                return Ok(new
-                {
-                    message =
-                        "Seat deleted successfully"
-                });
+                return NoContent();
             }
             catch (KeyNotFoundException ex)
             {
@@ -166,7 +128,7 @@ namespace EventParkingReservation.Controllers
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new
+                return Conflict(new
                 {
                     message = ex.Message
                 });

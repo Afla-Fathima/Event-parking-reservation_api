@@ -1,26 +1,23 @@
-﻿using EventParkingReservation.DTOs.ParkingSlot;
+using EventParkingReservation.DTOs.Parking;
 
 namespace EventParkingReservation.Services.Interfaces
 {
-    public interface IParkingSlotService
+    public interface IParkingService
     {
-        Task<IEnumerable<ParkingSlotResponseDto>>
-            GetAllAsync();
+        Task<IEnumerable<ParkingSlotDto>>
+            GetByEventAsync(int eventId);
 
-        Task<IEnumerable<ParkingSlotResponseDto>>
-            GetByEventIdAsync(int eventId);
+        Task<ParkingSlotDto> CreateAsync(
+            int eventId,
+            CreateParkingSlotDto dto);
 
-        Task<ParkingSlotResponseDto?>
-            GetByIdAsync(int id);
+        Task<ParkingSlotDto> UpdateAsync(
+            int eventId,
+            int slotId,
+            UpdateParkingSlotDto dto);
 
-        Task<ParkingSlotResponseDto>
-            AddAsync(CreateParkingSlotDto dto);
-
-        Task<ParkingSlotResponseDto>
-            UpdateAsync(
-                int id,
-                UpdateParkingSlotDto dto);
-
-        Task DeleteAsync(int id);
+        Task DeleteAsync(
+            int eventId,
+            int slotId);
     }
 }

@@ -1,23 +1,23 @@
-﻿using EventParkingReservation.DTOs.Seat;
+using EventParkingReservation.DTOs.Seat;
 
 namespace EventParkingReservation.Services.Interfaces
 {
     public interface ISeatService
     {
-        Task<IEnumerable<SeatResponseDto>>
-            GetByEventIdAsync(int eventId);
+        Task<IEnumerable<SeatDto>>
+            GetByEventAsync(int eventId);
 
-        Task<SeatResponseDto?>
-            GetByIdAsync(int seatId);
+        Task<SeatDto> CreateAsync(
+            int eventId,
+            CreateSeatDto dto);
 
-        Task<SeatResponseDto>
-            AddAsync(CreateSeatDto dto);
+        Task<SeatDto> UpdateAsync(
+            int eventId,
+            int seatId,
+            UpdateSeatDto dto);
 
-        Task<SeatResponseDto>
-            UpdateAsync(
-                int seatId,
-                UpdateSeatDto dto);
-
-        Task DeleteAsync(int seatId);
+        Task DeleteAsync(
+            int eventId,
+            int seatId);
     }
 }

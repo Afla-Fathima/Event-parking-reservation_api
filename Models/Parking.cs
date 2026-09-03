@@ -1,25 +1,32 @@
-﻿using System.Text.Json.Serialization;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace EventParkingReservation.Models
 {
     public class ParkingSlot
     {
+        [Key]
         public int ParkingSlotId { get; set; }
 
         public int EventId { get; set; }
 
+        [Required]
+        [MaxLength(20)]
         public string SlotNumber { get; set; } = string.Empty;
 
-        public string VehicleType { get; set; } = string.Empty;
+        [Required]
+        [MaxLength(50)]
+        public string VehicleType { get; set; } = "Car";
 
+        [Column(TypeName = "decimal(18,2)")]
         public decimal Fee { get; set; }
 
+        [Required]
+        [MaxLength(20)]
         public string Status { get; set; } = "Available";
 
-        [JsonIgnore]
-        public Event Event { get; set; } = null!;
+        public Event? Event { get; set; }
 
-        [JsonIgnore]
         public ICollection<ParkingReservation> ParkingReservations
         {
             get;

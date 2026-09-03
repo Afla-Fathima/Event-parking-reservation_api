@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace Event_Parking_Reservation.Migrations
+namespace EventParkingReservation.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -402,3 +402,4 @@ namespace Event_Parking_Reservation.Migrations
         }
     }
 }
+

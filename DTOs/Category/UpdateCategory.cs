@@ -1,6 +1,7 @@
-﻿namespace Event_Parking_Reservation.DTOs.Category
+namespace EventParkingReservation.DTOs.Category
 {
-    public class UpdateCategory
+    public class UpdateCategoryDto : CreateCategoryDto
     {
+        public string Status { get; set; } = "Active";
     }
 }

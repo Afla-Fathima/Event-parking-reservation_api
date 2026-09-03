@@ -1,6 +1,6 @@
-﻿namespace EventParkingReservation.DTOs.ParkingSlot
+namespace EventParkingReservation.DTOs.Parking
 {
-    public class ParkingSlotResponseDto
+    public class ParkingSlotDto
     {
         public int ParkingSlotId { get; set; }
 

@@ -1,6 +1,7 @@
-﻿namespace Event_Parking_Reservation.DTOs.Notification
+namespace EventParkingReservation.DTOs.Notification
 {
     public class CreateNotificationDto
     {
     }
 }
+

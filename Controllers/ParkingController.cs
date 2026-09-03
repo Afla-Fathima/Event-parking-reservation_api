@@ -1,84 +1,69 @@
-﻿using EventParkingReservation.DTOs.ParkingSlot;
+using EventParkingReservation.DTOs.Parking;
 using EventParkingReservation.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EventParkingReservation.Controllers
 {
-    [Route("api/[controller]")]
     [ApiController]
-    public class ParkingSlotController : ControllerBase
+    [Route(
+        "api/events/{eventId:int}/parking-slots")]
+    public class ParkingController :
+        ControllerBase
     {
-        private readonly IParkingSlotService _service;
+        private readonly IParkingService
+            _service;
 
-        public ParkingSlotController(
-            IParkingSlotService service)
+        public ParkingController(
+            IParkingService service)
         {
             _service = service;
         }
 
-        // GET: api/ParkingSlot
         [HttpGet]
-        public async Task<IActionResult> GetAll()
-        {
-            var slots =
-                await _service.GetAllAsync();
-
-            return Ok(slots);
-        }
-
-        // GET: api/ParkingSlot/1
-        [HttpGet("{id:int}")]
-        public async Task<IActionResult>
-            GetById(int id)
-        {
-            var slot =
-                await _service.GetByIdAsync(id);
-
-            if (slot == null)
-            {
-                return NotFound(new
-                {
-                    message =
-                        "Parking slot not found"
-                });
-            }
-
-            return Ok(slot);
-        }
-
-        // GET: api/ParkingSlot/event/1
-        [HttpGet("event/{eventId:int}")]
         public async Task<IActionResult>
             GetByEvent(int eventId)
         {
-            var slots =
-                await _service
-                    .GetByEventIdAsync(eventId);
-
-            return Ok(slots);
+            try
+            {
+                return Ok(
+                    await _service
+                        .GetByEventAsync(
+                            eventId));
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new
+                {
+                    message = ex.Message
+                });
+            }
         }
 
-        // POST: api/ParkingSlot
         [HttpPost]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult>
-            Create(CreateParkingSlotDto dto)
+            Create(
+                int eventId,
+                CreateParkingSlotDto dto)
         {
             try
             {
-                var slot =
-                    await _service.AddAsync(dto);
+                var result =
+                    await _service
+                        .CreateAsync(
+                            eventId,
+                            dto);
 
-                return CreatedAtAction(
-                    nameof(GetById),
-                    new
-                    {
-                        id = slot.ParkingSlotId
-                    },
-                    slot);
+                return StatusCode(
+                    StatusCodes
+                        .Status201Created,
+                    result);
             }
-            catch (InvalidOperationException ex)
+            catch (Exception ex)
+                when (
+                    ex is KeyNotFoundException ||
+                    ex is InvalidOperationException)
             {
                 return BadRequest(new
                 {
@@ -87,27 +72,22 @@ namespace EventParkingReservation.Controllers
             }
         }
 
-        // PUT: api/ParkingSlot/1
-        [HttpPut("{id:int}")]
+        [HttpPut("{slotId:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult>
             Update(
-                int id,
+                int eventId,
+                int slotId,
                 UpdateParkingSlotDto dto)
         {
             try
             {
-                var slot =
+                return Ok(
                     await _service
-                        .UpdateAsync(id, dto);
-
-                return Ok(new
-                {
-                    message =
-                        "Parking slot updated successfully",
-
-                    data = slot
-                });
+                        .UpdateAsync(
+                            eventId,
+                            slotId,
+                            dto));
             }
             catch (KeyNotFoundException ex)
             {
@@ -118,28 +98,28 @@ namespace EventParkingReservation.Controllers
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new
+                return Conflict(new
                 {
                     message = ex.Message
                 });
             }
         }
 
-        // DELETE: api/ParkingSlot/1
-        [HttpDelete("{id:int}")]
+        [HttpDelete("{slotId:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult>
-            Delete(int id)
+            Delete(
+                int eventId,
+                int slotId)
         {
             try
             {
-                await _service.DeleteAsync(id);
+                await _service
+                    .DeleteAsync(
+                        eventId,
+                        slotId);
 
-                return Ok(new
-                {
-                    message =
-                        "Parking slot deleted successfully"
-                });
+                return NoContent();
             }
             catch (KeyNotFoundException ex)
             {
@@ -150,7 +130,7 @@ namespace EventParkingReservation.Controllers
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new
+                return Conflict(new
                 {
                     message = ex.Message
                 });

@@ -1,6 +1,7 @@
-﻿namespace Event_Parking_Reservation.DTOs.Customer
+namespace EventParkingReservation.DTOs.Customer
 {
     public class CustomerDto
     {
     }
 }
+
