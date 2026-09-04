@@ -19,7 +19,8 @@ namespace EventParkingReservation.Models
         [MaxLength(20)]
         public string Status { get; set; } = "Active";
 
-        public DateTime ReservedAt { get; set; } = DateTime.UtcNow;
+        public DateTime ReservedAt { get; set; }
+            = DateTime.UtcNow;
 
         public Booking? Booking { get; set; }
 

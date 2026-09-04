@@ -6,9 +6,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace EventParkingReservation.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
-    public class EventController :
-        ControllerBase
+    [Route("api/events")]
+    [Authorize]
+    public class EventController : ControllerBase
     {
         private readonly IEventService _service;
 
@@ -19,61 +19,60 @@ namespace EventParkingReservation.Controllers
         }
 
         [HttpGet]
+        [Authorize(Roles = "Admin,Customer")]
         public async Task<IActionResult> GetAll(
-            string? search = null,
-            int? venueId = null,
-            int? categoryId = null,
-            DateOnly? date = null)
+            [FromQuery] string? search,
+            [FromQuery] DateOnly? date,
+            [FromQuery] int? venue,
+            [FromQuery] int? category)
         {
-            return Ok(
+            var result =
                 await _service.GetAllAsync(
                     search,
-                    venueId,
-                    categoryId,
-                    date));
+                    date,
+                    venue,
+                    category);
+
+            return Ok(result);
         }
 
         [HttpGet("{id:int}")]
-        public async Task<IActionResult>
-            GetById(int id)
+        [Authorize(Roles = "Admin,Customer")]
+        public async Task<IActionResult> GetById(
+            int id)
         {
-            try
-            {
-                return Ok(
-                    await _service
-                        .GetByIdAsync(id));
-            }
-            catch (KeyNotFoundException ex)
+            var result =
+                await _service.GetByIdAsync(id);
+
+            if (result == null)
             {
                 return NotFound(new
                 {
-                    message = ex.Message
+                    message = "Event not found."
                 });
             }
+
+            return Ok(result);
         }
 
         [HttpPost]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult>
-            Create(CreateEventDto dto)
+        public async Task<IActionResult> Create(
+            CreateEventDto dto)
         {
             try
             {
                 var result =
-                    await _service
-                        .CreateAsync(dto);
+                    await _service.CreateAsync(dto);
 
-                return StatusCode(
-                    StatusCodes
-                        .Status201Created,
+                return CreatedAtAction(
+                    nameof(GetById),
+                    new { id = result.EventId },
                     result);
             }
-            catch (Exception ex)
-                when (
-                    ex is KeyNotFoundException ||
-                    ex is InvalidOperationException)
+            catch (InvalidOperationException ex)
             {
-                return BadRequest(new
+                return Conflict(new
                 {
                     message = ex.Message
                 });
@@ -82,18 +81,16 @@ namespace EventParkingReservation.Controllers
 
         [HttpPut("{id:int}")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult>
-            Update(
-                int id,
-                UpdateEventDto dto)
+        public async Task<IActionResult> Update(
+            int id,
+            UpdateEventDto dto)
         {
             try
             {
                 return Ok(
-                    await _service
-                        .UpdateAsync(
-                            id,
-                            dto));
+                    await _service.UpdateAsync(
+                        id,
+                        dto));
             }
             catch (KeyNotFoundException ex)
             {
@@ -113,8 +110,8 @@ namespace EventParkingReservation.Controllers
 
         [HttpDelete("{id:int}")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult>
-            Delete(int id)
+        public async Task<IActionResult> Delete(
+            int id)
         {
             try
             {

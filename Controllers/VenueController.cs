@@ -6,9 +6,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace EventParkingReservation.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
-    public class VenueController :
-        ControllerBase
+    [Route("api/venues")]
+    [Authorize]
+    public class VenueController : ControllerBase
     {
         private readonly IVenueService _service;
 
@@ -18,7 +18,9 @@ namespace EventParkingReservation.Controllers
             _service = service;
         }
 
+        // Admin + Customer can view
         [HttpGet]
+        [Authorize(Roles = "Admin,Customer")]
         public async Task<IActionResult> GetAll()
         {
             return Ok(
@@ -26,51 +28,50 @@ namespace EventParkingReservation.Controllers
         }
 
         [HttpGet("{id:int}")]
-        public async Task<IActionResult>
-            GetById(int id)
+        [Authorize(Roles = "Admin,Customer")]
+        public async Task<IActionResult> GetById(
+            int id)
         {
-            try
-            {
-                return Ok(
-                    await _service
-                        .GetByIdAsync(id));
-            }
-            catch (KeyNotFoundException ex)
+            var venue =
+                await _service.GetByIdAsync(id);
+
+            if (venue == null)
             {
                 return NotFound(new
                 {
-                    message = ex.Message
+                    message = "Venue not found."
                 });
             }
+
+            return Ok(venue);
         }
 
+        // ADMIN ONLY
         [HttpPost]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult>
-            Create(CreateVenueDto dto)
+        public async Task<IActionResult> Create(
+            CreateVenueDto dto)
         {
-            var result =
+            var venue =
                 await _service.CreateAsync(dto);
 
-            return StatusCode(
-                StatusCodes.Status201Created,
-                result);
+            return CreatedAtAction(
+                nameof(GetById),
+                new { id = venue.VenueId },
+                venue);
         }
 
+        // ADMIN ONLY
         [HttpPut("{id:int}")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult>
-            Update(
-                int id,
-                UpdateVenueDto dto)
+        public async Task<IActionResult> Update(
+            int id,
+            UpdateVenueDto dto)
         {
             try
             {
                 return Ok(
-                    await _service
-                        .UpdateAsync(
-                            id,
-                            dto));
+                    await _service.UpdateAsync(id, dto));
             }
             catch (KeyNotFoundException ex)
             {
@@ -79,12 +80,20 @@ namespace EventParkingReservation.Controllers
                     message = ex.Message
                 });
             }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new
+                {
+                    message = ex.Message
+                });
+            }
         }
 
+        // ADMIN ONLY
         [HttpDelete("{id:int}")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult>
-            Delete(int id)
+        public async Task<IActionResult> Delete(
+            int id)
         {
             try
             {

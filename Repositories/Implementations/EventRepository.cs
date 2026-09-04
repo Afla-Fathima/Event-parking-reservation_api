@@ -7,90 +7,217 @@ namespace EventParkingReservation.Repositories.Implementations
 {
     public class EventRepository : IEventRepository
     {
-        private readonly ApplicationDbContext _context;
+        private readonly ApplicationDbContext _db;
 
-        public EventRepository(ApplicationDbContext context)
+        public EventRepository(
+            ApplicationDbContext db)
         {
-            _context = context;
+            _db = db;
         }
 
-        public async Task<IEnumerable<Event>> GetAllAsync(
-            string? search = null,
-            int? venueId = null,
-            int? categoryId = null,
-            DateOnly? date = null)
+        public async Task<List<Event>> GetAllAsync(
+            string? search,
+            DateOnly? date,
+            int? venueId,
+            int? categoryId)
         {
-            IQueryable<Event> query =
-                _context.Events
+            var query =
+                _db.Events
+                    .AsNoTracking()
                     .Include(x => x.Venue)
                     .Include(x => x.Category)
-                    .AsNoTracking();
+                    .AsQueryable();
 
-            if (!string.IsNullOrWhiteSpace(search))
+            if (!string.IsNullOrWhiteSpace(
+                search))
             {
-                query = query.Where(x =>
-                    x.EventName.Contains(search));
-            }
+                var value =
+                    search.Trim();
 
-            if (venueId.HasValue)
-            {
-                query = query.Where(x =>
-                    x.VenueId == venueId.Value);
-            }
-
-            if (categoryId.HasValue)
-            {
-                query = query.Where(x =>
-                    x.CategoryId == categoryId.Value);
+                query =
+                    query.Where(x =>
+                        x.EventName.Contains(value));
             }
 
             if (date.HasValue)
             {
-                query = query.Where(x =>
-                    x.EventDate == date.Value);
+                var eventDate =
+                    date.Value;
+
+                query =
+                    query.Where(x =>
+                        x.EventDate ==
+                            eventDate);
+            }
+
+            if (venueId.HasValue)
+            {
+                var venue =
+                    venueId.Value;
+
+                query =
+                    query.Where(x =>
+                        x.VenueId ==
+                            venue);
+            }
+
+            if (categoryId.HasValue)
+            {
+                var category =
+                    categoryId.Value;
+
+                query =
+                    query.Where(x =>
+                        x.CategoryId ==
+                            category);
             }
 
             return await query
-                .OrderBy(x => x.EventDate)
-                .ThenBy(x => x.StartTime)
+                .OrderBy(x =>
+                    x.EventDate)
+                .ThenBy(x =>
+                    x.StartTime)
                 .ToListAsync();
         }
 
-        public async Task<Event?> GetByIdAsync(int id)
+        public Task<Event?> GetByIdAsync(
+            int id)
         {
-            return await _context.Events
+            return _db.Events
                 .Include(x => x.Venue)
                 .Include(x => x.Category)
-                .FirstOrDefaultAsync(x => x.EventId == id);
+                .FirstOrDefaultAsync(x =>
+                    x.EventId == id);
         }
 
-        public async Task<bool> HasActiveBookingsAsync(
-            int eventId)
+        public Task<bool> VenueExistsAsync(
+            int venueId)
         {
-            return await _context.Bookings.AnyAsync(x =>
-                x.EventId == eventId &&
-                x.Status != "Cancelled");
+            return _db.Venues
+                .AnyAsync(x =>
+                    x.VenueId ==
+                        venueId);
         }
 
-        public async Task AddAsync(Event eventEntity)
+        public Task<bool> CategoryExistsAsync(
+            int categoryId)
         {
-            _context.Events.Add(eventEntity);
-
-            await _context.SaveChangesAsync();
+            return _db.EventCategories
+                .AnyAsync(x =>
+                    x.CategoryId ==
+                        categoryId);
         }
 
-        public async Task UpdateAsync(Event eventEntity)
+        public Task<Venue?> GetVenueAsync(
+            int venueId)
         {
-            _context.Events.Update(eventEntity);
-
-            await _context.SaveChangesAsync();
+            return _db.Venues
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x =>
+                    x.VenueId ==
+                        venueId);
         }
 
-        public async Task DeleteAsync(Event eventEntity)
+        public Task<bool> HasOverlapAsync(
+            int venueId,
+            DateOnly date,
+            TimeOnly start,
+            TimeOnly end,
+            int? excludeEventId = null)
         {
-            _context.Events.Remove(eventEntity);
+            return _db.Events
+                .AnyAsync(x =>
+                    x.VenueId ==
+                        venueId &&
 
-            await _context.SaveChangesAsync();
+                    x.EventDate ==
+                        date &&
+
+                    (
+                        !excludeEventId.HasValue ||
+                        x.EventId !=
+                            excludeEventId.Value
+                    ) &&
+
+                    start <
+                        x.EndTime &&
+
+                    end >
+                        x.StartTime);
+        }
+
+        public Task<bool>
+            HasActiveBookingsAsync(
+                int eventId)
+        {
+            return _db.Bookings
+                .AnyAsync(x =>
+                    x.EventId ==
+                        eventId &&
+
+                    x.Status !=
+                        "Cancelled" &&
+
+                    x.Status !=
+                        "Expired");
+        }
+
+        public Task<int>
+            BookedSeatCountAsync(
+                int eventId)
+        {
+            return _db.BookingSeats
+                .CountAsync(x =>
+                    x.Seat != null &&
+                    x.Seat.EventId ==
+                        eventId &&
+                    x.Status ==
+                        "Active");
+        }
+
+        public Task<List<int>>
+            GetActiveBookingCustomerIdsAsync(
+                int eventId)
+        {
+            return _db.Bookings
+                .AsNoTracking()
+                .Where(x =>
+                    x.EventId ==
+                        eventId &&
+
+                    x.Status !=
+                        "Cancelled" &&
+
+                    x.Status !=
+                        "Expired")
+                .Select(x =>
+                    x.CustomerId)
+                .Distinct()
+                .ToListAsync();
+        }
+
+        public async Task AddAsync(
+            Event entity)
+        {
+            _db.Events.Add(entity);
+
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task UpdateAsync(
+            Event entity)
+        {
+            _db.Events.Update(entity);
+
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task DeleteAsync(
+            Event entity)
+        {
+            _db.Events.Remove(entity);
+
+            await _db.SaveChangesAsync();
         }
     }
 }

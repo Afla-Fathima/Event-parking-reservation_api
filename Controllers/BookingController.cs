@@ -1,4 +1,5 @@
 using EventParkingReservation.DTOs.Booking;
+using EventParkingReservation.Security;
 using EventParkingReservation.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -6,13 +7,11 @@ using Microsoft.AspNetCore.Mvc;
 namespace EventParkingReservation.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/bookings")]
     [Authorize]
-    public class BookingController :
-        ControllerBase
+    public class BookingController : ControllerBase
     {
-        private readonly IBookingService
-            _service;
+        private readonly IBookingService _service;
 
         public BookingController(
             IBookingService service)
@@ -20,60 +19,26 @@ namespace EventParkingReservation.Controllers
             _service = service;
         }
 
-        [HttpGet]
-        [Authorize(Roles = "Admin")]
-        public async Task<IActionResult>
-            GetAll(int? eventId = null)
-        {
-            return Ok(
-                await _service
-                    .GetAllAsync(eventId));
-        }
-
-        [HttpGet("{id:int}")]
-        public async Task<IActionResult>
-            GetById(int id)
-        {
-            try
-            {
-                return Ok(
-                    await _service
-                        .GetByIdAsync(id));
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(new
-                {
-                    message = ex.Message
-                });
-            }
-        }
-
-        [HttpGet(
-            "customer/{customerId:int}")]
-        public async Task<IActionResult>
-            GetByCustomer(
-                int customerId)
-        {
-            return Ok(
-                await _service
-                    .GetByCustomerAsync(
-                        customerId));
-        }
-
         [HttpPost]
-        public async Task<IActionResult>
-            Create(CreateBookingDto dto)
+        [Authorize(Roles = "Customer")]
+        public async Task<IActionResult> Create(
+            CreateBookingDto dto)
         {
             try
             {
-                var result =
-                    await _service
-                        .CreateAsync(dto);
+                dto.CustomerId =
+                    User.GetCustomerId();
 
-                return StatusCode(
-                    StatusCodes
-                        .Status201Created,
+                var result =
+                    await _service.CreateAsync(dto);
+
+                return CreatedAtAction(
+                    nameof(GetById),
+                    new
+                    {
+                        id =
+                            result.BookingId
+                    },
                     result);
             }
             catch (KeyNotFoundException ex)
@@ -85,7 +50,6 @@ namespace EventParkingReservation.Controllers
             }
             catch (InvalidOperationException ex)
             {
-                // Important for Angular seat/parking refresh
                 return Conflict(new
                 {
                     message = ex.Message
@@ -94,23 +58,22 @@ namespace EventParkingReservation.Controllers
         }
 
         [HttpPost("{bookingId:int}/seats")]
-        public async Task<IActionResult>
-            AddSeats(
-                int bookingId,
-                AttachSeatsDto dto)
+        [Authorize(Roles = "Customer")]
+        public async Task<IActionResult> AddSeats(
+            int bookingId,
+            AttachSeatsDto dto)
         {
             try
             {
-                await _service
-                    .AddSeatsAsync(
+                return Ok(
+                    await _service.AddSeatsAsync(
                         bookingId,
-                        dto);
-
-                return Ok(new
-                {
-                    message =
-                        "Seats added successfully."
-                });
+                        User.GetCustomerId(),
+                        dto));
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid();
             }
             catch (KeyNotFoundException ex)
             {
@@ -128,8 +91,8 @@ namespace EventParkingReservation.Controllers
             }
         }
 
-        [HttpPost(
-            "{bookingId:int}/parking")]
+        [HttpPost("{bookingId:int}/parking")]
+        [Authorize(Roles = "Customer")]
         public async Task<IActionResult>
             ReserveParking(
                 int bookingId,
@@ -137,70 +100,213 @@ namespace EventParkingReservation.Controllers
         {
             try
             {
-                await _service
-                    .ReserveParkingAsync(
-                        bookingId,
-                        dto);
+                return Ok(
+                    await _service
+                        .ReserveParkingAsync(
+                            bookingId,
+                            User.GetCustomerId(),
+                            dto));
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid();
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new
+                {
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new
+                {
+                    message = ex.Message
+                });
+            }
+        }
 
-                return Ok(new
+        [HttpDelete("{bookingId:int}/parking")]
+        [Authorize(Roles = "Customer")]
+        public async Task<IActionResult>
+            RemoveParking(
+                int bookingId)
+        {
+            try
+            {
+                return Ok(
+                    await _service
+                        .RemoveParkingAsync(
+                            bookingId,
+                            User.GetCustomerId()));
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid();
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new
+                {
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new
+                {
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("my")]
+        [Authorize(Roles = "Customer")]
+        public async Task<IActionResult>
+            GetMyBookings()
+        {
+            return Ok(
+                await _service
+                    .GetByCustomerAsync(
+                        User.GetCustomerId()));
+        }
+
+        [HttpGet("customer/{customerId:int}")]
+        [Authorize(Roles = "Admin,Customer")]
+        public async Task<IActionResult>
+            GetByCustomer(
+                int customerId)
+        {
+            if (User.IsInRole("Customer") &&
+                User.GetCustomerId() !=
+                    customerId)
+            {
+                return Forbid();
+            }
+
+            return Ok(
+                await _service
+                    .GetByCustomerAsync(
+                        customerId));
+        }
+
+        [HttpGet("my/{id:int}")]
+        [Authorize(Roles = "Customer")]
+        public async Task<IActionResult>
+            GetMyBooking(
+                int id)
+        {
+            var booking =
+                await _service.GetByIdAsync(id);
+
+            if (booking == null)
+            {
+                return NotFound();
+            }
+
+            if (booking.CustomerId !=
+                User.GetCustomerId())
+            {
+                return Forbid();
+            }
+
+            return Ok(booking);
+        }
+
+        [HttpGet("{id:int}")]
+        [Authorize(Roles = "Admin,Customer")]
+        public async Task<IActionResult> GetById(
+            int id)
+        {
+            var booking =
+                await _service.GetByIdAsync(id);
+
+            if (booking == null)
+            {
+                return NotFound(new
                 {
                     message =
-                        "Parking reserved successfully."
+                        "Booking not found."
                 });
             }
-            catch (KeyNotFoundException ex)
+
+            if (User.IsInRole("Customer") &&
+                booking.CustomerId !=
+                    User.GetCustomerId())
             {
-                return NotFound(new
-                {
-                    message = ex.Message
-                });
+                return Forbid();
             }
-            catch (InvalidOperationException ex)
-            {
-                return Conflict(new
-                {
-                    message = ex.Message
-                });
-            }
+
+            return Ok(booking);
         }
 
-        [HttpDelete(
-            "{bookingId:int}/parking")]
+        [HttpDelete("my/{id:int}")]
+        [Authorize(Roles = "Customer")]
         public async Task<IActionResult>
-            RemoveParking(int bookingId)
+            CancelMyBooking(
+                int id)
+        {
+            return await CancelOwnedBooking(
+                id);
+        }
+
+        [HttpDelete("{id:int}")]
+        [Authorize(Roles = "Customer")]
+        public async Task<IActionResult> Cancel(
+            int id)
+        {
+            return await CancelOwnedBooking(
+                id);
+        }
+
+        [HttpGet]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult>
+            GetByEvent(
+                [FromQuery] int eventId)
+        {
+            if (eventId <= 0)
+            {
+                return BadRequest(new
+                {
+                    message =
+                        "Valid eventId is required."
+                });
+            }
+
+            return Ok(
+                await _service
+                    .GetByEventAsync(
+                        eventId));
+        }
+
+        private async Task<IActionResult>
+            CancelOwnedBooking(
+                int id)
         {
             try
             {
-                await _service
-                    .RemoveParkingAsync(
-                        bookingId);
+                var booking =
+                    await _service
+                        .GetByIdAsync(id);
 
-                return NoContent();
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(new
+                if (booking == null)
                 {
-                    message = ex.Message
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Conflict(new
-                {
-                    message = ex.Message
-                });
-            }
-        }
+                    return NotFound(new
+                    {
+                        message =
+                            "Booking not found."
+                    });
+                }
 
-        [HttpDelete("{bookingId:int}")]
-        public async Task<IActionResult>
-            Cancel(int bookingId)
-        {
-            try
-            {
-                await _service
-                    .CancelAsync(bookingId);
+                if (booking.CustomerId !=
+                    User.GetCustomerId())
+                {
+                    return Forbid();
+                }
+
+                await _service.CancelAsync(id);
 
                 return NoContent();
             }

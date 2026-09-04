@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using EventParkingReservation.DTOs.Auth;
 using EventParkingReservation.DTOs.Customer;
@@ -23,29 +24,41 @@ namespace EventParkingReservation.Services.Implementations
             _configuration = configuration;
         }
 
-        public async Task<CustomerResponseDto>
-            RegisterAsync(RegisterDto dto)
+        // =====================================================
+        // REGISTER
+        // =====================================================
+
+        public async Task<CustomerResponseDto> RegisterAsync(
+            RegisterDto dto)
         {
             string email =
                 dto.Email.Trim().ToLower();
 
-            if (await _repository
-                .EmailExistsAsync(email))
+            bool exists =
+                await _repository.EmailExistsAsync(email);
+
+            if (exists)
             {
                 throw new InvalidOperationException(
                     "Email already exists.");
             }
 
-            Customer customer = new()
+            var customer = new Customer
             {
                 Name = dto.FullName.Trim(),
+
                 Email = email,
+
                 PhoneNumber = dto.Phone.Trim(),
+
                 PasswordHash =
                     BCrypt.Net.BCrypt.HashPassword(
                         dto.Password),
+
                 Role = "Customer",
+
                 Status = "Active",
+
                 CreatedDate = DateTime.UtcNow
             };
 
@@ -54,15 +67,18 @@ namespace EventParkingReservation.Services.Implementations
             return MapCustomer(customer);
         }
 
-        public async Task<LoginResponseDto>
-            LoginAsync(LoginRequestDto dto)
+        // =====================================================
+        // LOGIN
+        // =====================================================
+
+        public async Task<LoginResponseDto> LoginAsync(
+            LoginRequestDto dto)
         {
             string email =
                 dto.Email.Trim().ToLower();
 
             Customer? customer =
-                await _repository
-                    .GetByEmailAsync(email);
+                await _repository.GetByEmailAsync(email);
 
             if (customer == null)
             {
@@ -70,18 +86,21 @@ namespace EventParkingReservation.Services.Implementations
                     "Invalid email or password.");
             }
 
-            bool valid =
+            bool passwordValid =
                 BCrypt.Net.BCrypt.Verify(
                     dto.Password,
                     customer.PasswordHash);
 
-            if (!valid)
+            if (!passwordValid)
             {
                 throw new UnauthorizedAccessException(
                     "Invalid email or password.");
             }
 
-            if (customer.Status != "Active")
+            if (!string.Equals(
+                customer.Status,
+                "Active",
+                StringComparison.OrdinalIgnoreCase))
             {
                 throw new UnauthorizedAccessException(
                     "Account is inactive.");
@@ -91,7 +110,7 @@ namespace EventParkingReservation.Services.Implementations
                 DateTime.UtcNow.AddHours(2);
 
             string token =
-                GenerateToken(
+                GenerateJwtToken(
                     customer,
                     expiration);
 
@@ -117,34 +136,140 @@ namespace EventParkingReservation.Services.Implementations
             };
         }
 
+        // =====================================================
+        // CHECK EMAIL
+        // =====================================================
+
         public async Task<bool> CheckEmailAsync(
             string email)
         {
-            return await _repository
-                .EmailExistsAsync(
-                    email.Trim().ToLower());
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                return false;
+            }
+
+            return await _repository.EmailExistsAsync(
+                email.Trim().ToLower());
         }
 
-        private string GenerateToken(
+        // =====================================================
+        // FORGOT PASSWORD
+        // =====================================================
+
+        public async Task<string> ForgotPasswordAsync(
+            ForgotPasswordDto dto)
+        {
+            string email =
+                dto.Email.Trim().ToLower();
+
+            Customer? customer =
+                await _repository.GetByEmailAsync(
+                    email);
+
+            // Do not reveal whether an account exists.
+            if (customer == null)
+            {
+                return string.Empty;
+            }
+
+            byte[] randomBytes =
+                RandomNumberGenerator.GetBytes(32);
+
+            string token =
+                Convert.ToHexString(randomBytes);
+
+            customer.PasswordResetToken =
+                token;
+
+            customer.PasswordResetTokenExpiresAt =
+                DateTime.UtcNow.AddMinutes(30);
+
+            await _repository.UpdateAsync(
+                customer);
+
+            // Development / student project testing only.
+            // In production, send this token by email.
+            return token;
+        }
+
+        // =====================================================
+        // RESET PASSWORD
+        // =====================================================
+
+        public async Task ResetPasswordAsync(
+            ResetPasswordDto dto)
+        {
+            Customer? customer =
+                await _repository
+                    .GetByPasswordResetTokenAsync(
+                        dto.Token);
+
+            if (customer == null)
+            {
+                throw new InvalidOperationException(
+                    "Invalid password reset token.");
+            }
+
+            if (customer.PasswordResetTokenExpiresAt == null)
+            {
+                throw new InvalidOperationException(
+                    "Invalid password reset token.");
+            }
+
+            if (customer.PasswordResetTokenExpiresAt <=
+                DateTime.UtcNow)
+            {
+                customer.PasswordResetToken =
+                    null;
+
+                customer.PasswordResetTokenExpiresAt =
+                    null;
+
+                await _repository.UpdateAsync(
+                    customer);
+
+                throw new InvalidOperationException(
+                    "Password reset token has expired.");
+            }
+
+            customer.PasswordHash =
+                BCrypt.Net.BCrypt.HashPassword(
+                    dto.NewPassword);
+
+            customer.PasswordResetToken =
+                null;
+
+            customer.PasswordResetTokenExpiresAt =
+                null;
+
+            await _repository.UpdateAsync(
+                customer);
+        }
+
+        // =====================================================
+        // JWT
+        // =====================================================
+
+        private string GenerateJwtToken(
             Customer customer,
             DateTime expiration)
         {
-            string key =
+            string jwtKey =
                 _configuration["Jwt:Key"]
                 ?? throw new InvalidOperationException(
                     "JWT Key is missing.");
 
-            string issuer =
+            string jwtIssuer =
                 _configuration["Jwt:Issuer"]
                 ?? throw new InvalidOperationException(
                     "JWT Issuer is missing.");
 
-            string audience =
+            string jwtAudience =
                 _configuration["Jwt:Audience"]
                 ?? throw new InvalidOperationException(
                     "JWT Audience is missing.");
 
-            Claim[] claims =
+            var claims = new List<Claim>
             {
                 new(
                     ClaimTypes.NameIdentifier,
@@ -163,31 +288,36 @@ namespace EventParkingReservation.Services.Implementations
                     customer.Role)
             };
 
-            SymmetricSecurityKey securityKey =
-                new(
-                    Encoding.UTF8.GetBytes(key));
+            var key =
+                new SymmetricSecurityKey(
+                    Encoding.UTF8.GetBytes(
+                        jwtKey));
 
-            SigningCredentials credentials =
-                new(
-                    securityKey,
-                    SecurityAlgorithms
-                        .HmacSha256);
+            var credentials =
+                new SigningCredentials(
+                    key,
+                    SecurityAlgorithms.HmacSha256);
 
-            JwtSecurityToken token =
-                new(
-                    issuer: issuer,
-                    audience: audience,
+            var jwt =
+                new JwtSecurityToken(
+                    issuer: jwtIssuer,
+                    audience: jwtAudience,
                     claims: claims,
+                    notBefore: DateTime.UtcNow,
                     expires: expiration,
                     signingCredentials:
                         credentials);
 
             return new JwtSecurityTokenHandler()
-                .WriteToken(token);
+                .WriteToken(jwt);
         }
 
-        private static CustomerResponseDto
-            MapCustomer(Customer customer)
+        // =====================================================
+        // MAPPING
+        // =====================================================
+
+        private static CustomerResponseDto MapCustomer(
+            Customer customer)
         {
             return new CustomerResponseDto
             {

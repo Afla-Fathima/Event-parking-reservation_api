@@ -4,11 +4,9 @@ using EventParkingReservation.Services.Interfaces;
 
 namespace EventParkingReservation.Services.Implementations
 {
-    public class DashboardService :
-        IDashboardService
+    public class DashboardService : IDashboardService
     {
-        private readonly IDashboardRepository
-            _repository;
+        private readonly IDashboardRepository _repository;
 
         public DashboardService(
             IDashboardRepository repository)
@@ -16,20 +14,19 @@ namespace EventParkingReservation.Services.Implementations
             _repository = repository;
         }
 
-        public Task<CustomerDashboardDto>
-            GetCustomerDashboardAsync(
+        public async Task<CustomerDashboardDto>
+            GetCustomerAsync(
                 int customerId)
         {
-            return _repository
-                .GetCustomerDashboardAsync(
-                    customerId);
+            return await _repository
+                .GetCustomerAsync(customerId);
         }
 
-        public Task<AdminDashboardDto>
-            GetAdminDashboardAsync()
+        public async Task<AdminDashboardDto>
+            GetAdminAsync()
         {
-            return _repository
-                .GetAdminDashboardAsync();
+            return await _repository
+                .GetAdminAsync();
         }
     }
 }

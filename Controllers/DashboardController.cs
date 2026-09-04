@@ -1,3 +1,4 @@
+using EventParkingReservation.Security;
 using EventParkingReservation.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -5,13 +6,11 @@ using Microsoft.AspNetCore.Mvc;
 namespace EventParkingReservation.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/dashboard")]
     [Authorize]
-    public class DashboardController :
-        ControllerBase
+    public class DashboardController : ControllerBase
     {
-        private readonly IDashboardService
-            _service;
+        private readonly IDashboardService _service;
 
         public DashboardController(
             IDashboardService service)
@@ -19,26 +18,24 @@ namespace EventParkingReservation.Controllers
             _service = service;
         }
 
-        [HttpGet(
-            "customer/{customerId:int}")]
-        public async Task<IActionResult>
-            CustomerDashboard(
-                int customerId)
+        [HttpGet("customer")]
+        [Authorize(Roles = "Customer")]
+        public async Task<IActionResult> Customer()
         {
+            var customerId =
+                User.GetCustomerId();
+
             return Ok(
-                await _service
-                    .GetCustomerDashboardAsync(
-                        customerId));
+                await _service.GetCustomerAsync(
+                    customerId));
         }
 
         [HttpGet("admin")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult>
-            AdminDashboard()
+        public async Task<IActionResult> Admin()
         {
             return Ok(
-                await _service
-                    .GetAdminDashboardAsync());
+                await _service.GetAdminAsync());
         }
     }
 }

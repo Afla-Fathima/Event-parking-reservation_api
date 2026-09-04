@@ -1,127 +1,152 @@
 using EventParkingReservation.DTOs.Parking;
 using EventParkingReservation.Models;
-using EventParkingReservation.Repositories.Implementations;
 using EventParkingReservation.Repositories.Interfaces;
 using EventParkingReservation.Services.Interfaces;
 
 namespace EventParkingReservation.Services.Implementations
 {
-    public class ParkingService :
-        IParkingService
+    public class ParkingService : IParkingService
     {
-        private readonly IParkingRepository
-            _parkingRepository;
-
-        private readonly IEventRepository
-            _eventRepository;
+        private readonly IParkingRepository _repo;
 
         public ParkingService(
-            IParkingRepository parkingRepository,
-            IEventRepository eventRepository)
+            IParkingRepository repo)
         {
-            _parkingRepository =
-                parkingRepository;
-
-            _eventRepository =
-                eventRepository;
+            _repo = repo;
         }
 
-        public async Task<IEnumerable<ParkingSlotDto>>
-            GetByEventAsync(int eventId)
+        // =====================================================
+        // GET PARKING SLOTS BY EVENT
+        // Admin + Customer can view
+        // =====================================================
+
+        public async Task<List<ParkingSlotDto>>
+            GetByEventIdAsync(
+                int eventId)
         {
-            _ =
-                await _eventRepository
-                    .GetByIdAsync(eventId)
-                ?? throw new KeyNotFoundException(
-                    "Event not found.");
+            var eventItem =
+                await _repo.GetEventAsync(eventId);
 
-            var slots =
-                await _parkingRepository
-                    .GetByEventIdAsync(eventId);
-
-            return slots.Select(Map);
-        }
-
-        public async Task<ParkingSlotDto>
-            CreateAsync(
-                int eventId,
-                CreateParkingSlotDto dto)
-        {
-            _ =
-                await _eventRepository
-                    .GetByIdAsync(eventId)
-                ?? throw new KeyNotFoundException(
-                    "Event not found.");
-
-            if (await _parkingRepository
-                .SlotNumberExistsAsync(
-                    eventId,
-                    dto.SlotNumber.Trim()))
+            if (eventItem == null)
             {
-                throw new InvalidOperationException(
-                    "Parking slot number already exists.");
+                throw new KeyNotFoundException(
+                    "Event not found.");
             }
 
-            var slot = new ParkingSlot
+            var slots =
+                await _repo.GetByEventIdAsync(
+                    eventId);
+
+            return slots
+                .Select(Map)
+                .ToList();
+        }
+
+        // =====================================================
+        // CREATE PARKING SLOT - ADMIN
+        // =====================================================
+
+        public async Task<ParkingSlotDto> CreateAsync(
+            int eventId,
+            CreateParkingSlotDto dto)
+        {
+            var eventItem =
+                await _repo.GetEventAsync(eventId);
+
+            if (eventItem == null)
             {
-                EventId = eventId,
+                throw new KeyNotFoundException(
+                    "Event not found.");
+            }
 
-                SlotNumber =
-                    dto.SlotNumber.Trim(),
+            var slotNumber =
+                dto.SlotNumber
+                    .Trim()
+                    .ToUpperInvariant();
 
-                VehicleType =
-                    dto.VehicleType.Trim(),
+            var exists =
+                await _repo.NumberExistsAsync(
+                    eventId,
+                    slotNumber);
 
-                Fee =
-                    dto.Fee,
+            if (exists)
+            {
+                throw new InvalidOperationException(
+                    "Parking slot number already exists for this event.");
+            }
 
-                Status =
-                    "Available"
-            };
+            var slot =
+                new ParkingSlot
+                {
+                    EventId = eventId,
 
-            await _parkingRepository
-                .AddAsync(slot);
+                    SlotNumber =
+                        slotNumber,
+
+                    VehicleType =
+                        dto.VehicleType.Trim(),
+
+                    Fee =
+                        dto.Fee,
+
+                    Status =
+                        "Available"
+                };
+
+            await _repo.AddAsync(slot);
 
             return Map(slot);
         }
 
-        public async Task<ParkingSlotDto>
-            UpdateAsync(
-                int eventId,
-                int slotId,
-                UpdateParkingSlotDto dto)
+        // =====================================================
+        // UPDATE PARKING SLOT - ADMIN
+        // =====================================================
+
+        public async Task<ParkingSlotDto> UpdateAsync(
+            int eventId,
+            int slotId,
+            UpdateParkingSlotDto dto)
         {
             var slot =
-                await _parkingRepository
-                    .GetByIdAsync(slotId)
+                await _repo.GetByIdAsync(slotId)
                 ?? throw new KeyNotFoundException(
                     "Parking slot not found.");
 
             if (slot.EventId != eventId)
             {
                 throw new KeyNotFoundException(
-                    "Parking slot does not belong to this event.");
+                    "Parking slot not found for this event.");
             }
 
-            if (await _parkingRepository
-                .HasActiveReservationAsync(slotId))
+            var hasReservation =
+                await _repo.HasActiveReservationAsync(
+                    slotId);
+
+            if (hasReservation)
             {
                 throw new InvalidOperationException(
-                    "Reserved parking slot cannot be modified.");
+                    "Reserved parking slot cannot be changed.");
             }
 
-            if (await _parkingRepository
-                .SlotNumberExistsAsync(
+            var slotNumber =
+                dto.SlotNumber
+                    .Trim()
+                    .ToUpperInvariant();
+
+            var exists =
+                await _repo.NumberExistsAsync(
                     eventId,
-                    dto.SlotNumber.Trim(),
-                    slotId))
+                    slotNumber,
+                    slotId);
+
+            if (exists)
             {
                 throw new InvalidOperationException(
-                    "Parking slot number already exists.");
+                    "Parking slot number already exists for this event.");
             }
 
             slot.SlotNumber =
-                dto.SlotNumber.Trim();
+                slotNumber;
 
             slot.VehicleType =
                 dto.VehicleType.Trim();
@@ -129,38 +154,46 @@ namespace EventParkingReservation.Services.Implementations
             slot.Fee =
                 dto.Fee;
 
-            await _parkingRepository
-                .UpdateAsync(slot);
+            await _repo.UpdateAsync(slot);
 
             return Map(slot);
         }
+
+        // =====================================================
+        // DELETE PARKING SLOT - ADMIN
+        // =====================================================
 
         public async Task DeleteAsync(
             int eventId,
             int slotId)
         {
             var slot =
-                await _parkingRepository
-                    .GetByIdAsync(slotId)
+                await _repo.GetByIdAsync(slotId)
                 ?? throw new KeyNotFoundException(
                     "Parking slot not found.");
 
             if (slot.EventId != eventId)
             {
                 throw new KeyNotFoundException(
-                    "Parking slot does not belong to this event.");
+                    "Parking slot not found for this event.");
             }
 
-            if (await _parkingRepository
-                .HasActiveReservationAsync(slotId))
+            var hasReservation =
+                await _repo.HasActiveReservationAsync(
+                    slotId);
+
+            if (hasReservation)
             {
                 throw new InvalidOperationException(
                     "Reserved parking slot cannot be deleted.");
             }
 
-            await _parkingRepository
-                .DeleteAsync(slot);
+            await _repo.DeleteAsync(slot);
         }
+
+        // =====================================================
+        // MAPPER
+        // =====================================================
 
         private static ParkingSlotDto Map(
             ParkingSlot slot)

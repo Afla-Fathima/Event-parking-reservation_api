@@ -1,6 +1,5 @@
 using EventParkingReservation.DTOs.Seat;
 using EventParkingReservation.Models;
-using EventParkingReservation.Repositories.Implementations;
 using EventParkingReservation.Repositories.Interfaces;
 using EventParkingReservation.Services.Interfaces;
 
@@ -8,75 +7,91 @@ namespace EventParkingReservation.Services.Implementations
 {
     public class SeatService : ISeatService
     {
-        private readonly ISeatRepository _seatRepository;
-        private readonly IEventRepository _eventRepository;
+        private readonly ISeatRepository _repo;
 
         public SeatService(
-            ISeatRepository seatRepository,
-            IEventRepository eventRepository)
+            ISeatRepository repo)
         {
-            _seatRepository = seatRepository;
-            _eventRepository = eventRepository;
+            _repo = repo;
         }
 
-        public async Task<IEnumerable<SeatDto>>
-            GetByEventAsync(int eventId)
+        public async Task<List<SeatDto>>
+            GetByEventIdAsync(
+                int eventId)
         {
-            var eventEntity =
-                await _eventRepository.GetByIdAsync(
-                    eventId)
-                ?? throw new KeyNotFoundException(
+            var eventItem =
+                await _repo.GetEventAsync(eventId);
+
+            if (eventItem == null)
+            {
+                throw new KeyNotFoundException(
                     "Event not found.");
+            }
 
             var seats =
-                await _seatRepository
-                    .GetByEventIdAsync(eventId);
+                await _repo.GetByEventIdAsync(
+                    eventId);
 
-            return seats.Select(Map);
+            return seats
+                .Select(Map)
+                .ToList();
         }
 
         public async Task<SeatDto> CreateAsync(
             int eventId,
             CreateSeatDto dto)
         {
-            var eventEntity =
-                await _eventRepository.GetByIdAsync(
-                    eventId)
+            var eventItem =
+                await _repo.GetEventAsync(eventId)
                 ?? throw new KeyNotFoundException(
                     "Event not found.");
 
-            var existingSeats =
-                await _seatRepository
-                    .GetByEventIdAsync(eventId);
+            var seatCount =
+                await _repo.CountByEventAsync(
+                    eventId);
 
-            if (existingSeats.Count() >=
-                eventEntity.Capacity)
+            if (seatCount >= eventItem.Capacity)
             {
                 throw new InvalidOperationException(
                     "Seat count cannot exceed event capacity.");
             }
 
-            if (await _seatRepository
-                .SeatNumberExistsAsync(
+            var seatNumber =
+                dto.SeatNumber
+                    .Trim()
+                    .ToUpperInvariant();
+
+            var exists =
+                await _repo.NumberExistsAsync(
                     eventId,
-                    dto.SeatNumber.Trim()))
+                    seatNumber);
+
+            if (exists)
             {
                 throw new InvalidOperationException(
-                    "Seat number already exists.");
+                    "Seat number already exists for this event.");
             }
 
-            var seat = new Seat
-            {
-                EventId = eventId,
-                SeatNumber =
-                    dto.SeatNumber.Trim(),
-                SeatType =
-                    dto.SeatType.Trim(),
-                Price = dto.Price,
-                Status = "Available"
-            };
+            var seat =
+                new Seat
+                {
+                    EventId =
+                        eventId,
 
-            await _seatRepository.AddAsync(seat);
+                    SeatNumber =
+                        seatNumber,
+
+                    SeatType =
+                        dto.SeatType.Trim(),
+
+                    Price =
+                        dto.Price,
+
+                    Status =
+                        "Available"
+                };
+
+            await _repo.AddAsync(seat);
 
             return Map(seat);
         }
@@ -87,36 +102,45 @@ namespace EventParkingReservation.Services.Implementations
             UpdateSeatDto dto)
         {
             var seat =
-                await _seatRepository.GetByIdAsync(
-                    seatId)
+                await _repo.GetByIdAsync(seatId)
                 ?? throw new KeyNotFoundException(
                     "Seat not found.");
 
             if (seat.EventId != eventId)
             {
                 throw new KeyNotFoundException(
-                    "Seat does not belong to this event.");
+                    "Seat not found for this event.");
             }
 
-            if (await _seatRepository
-                .HasActiveBookingAsync(seatId))
+            var booked =
+                await _repo.HasActiveBookingAsync(
+                    seatId);
+
+            if (booked)
             {
                 throw new InvalidOperationException(
-                    "Booked seat cannot be modified.");
+                    "Booked seat cannot be changed.");
             }
 
-            if (await _seatRepository
-                .SeatNumberExistsAsync(
+            var seatNumber =
+                dto.SeatNumber
+                    .Trim()
+                    .ToUpperInvariant();
+
+            var exists =
+                await _repo.NumberExistsAsync(
                     eventId,
-                    dto.SeatNumber.Trim(),
-                    seatId))
+                    seatNumber,
+                    seatId);
+
+            if (exists)
             {
                 throw new InvalidOperationException(
-                    "Seat number already exists.");
+                    "Seat number already exists for this event.");
             }
 
             seat.SeatNumber =
-                dto.SeatNumber.Trim();
+                seatNumber;
 
             seat.SeatType =
                 dto.SeatType.Trim();
@@ -124,8 +148,7 @@ namespace EventParkingReservation.Services.Implementations
             seat.Price =
                 dto.Price;
 
-            await _seatRepository.UpdateAsync(
-                seat);
+            await _repo.UpdateAsync(seat);
 
             return Map(seat);
         }
@@ -135,38 +158,51 @@ namespace EventParkingReservation.Services.Implementations
             int seatId)
         {
             var seat =
-                await _seatRepository.GetByIdAsync(
-                    seatId)
+                await _repo.GetByIdAsync(seatId)
                 ?? throw new KeyNotFoundException(
                     "Seat not found.");
 
             if (seat.EventId != eventId)
             {
                 throw new KeyNotFoundException(
-                    "Seat does not belong to this event.");
+                    "Seat not found for this event.");
             }
 
-            if (await _seatRepository
-                .HasActiveBookingAsync(seatId))
+            var booked =
+                await _repo.HasActiveBookingAsync(
+                    seatId);
+
+            if (booked)
             {
                 throw new InvalidOperationException(
                     "Booked seat cannot be deleted.");
             }
 
-            await _seatRepository.DeleteAsync(
-                seat);
+            await _repo.DeleteAsync(seat);
         }
 
-        private static SeatDto Map(Seat seat)
+        private static SeatDto Map(
+            Seat seat)
         {
             return new SeatDto
             {
-                SeatId = seat.SeatId,
-                EventId = seat.EventId,
-                SeatNumber = seat.SeatNumber,
-                SeatType = seat.SeatType,
-                Price = seat.Price,
-                Status = seat.Status
+                SeatId =
+                    seat.SeatId,
+
+                EventId =
+                    seat.EventId,
+
+                SeatNumber =
+                    seat.SeatNumber,
+
+                SeatType =
+                    seat.SeatType,
+
+                Price =
+                    seat.Price,
+
+                Status =
+                    seat.Status
             };
         }
     }

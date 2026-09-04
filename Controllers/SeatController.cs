@@ -7,8 +7,8 @@ namespace EventParkingReservation.Controllers
 {
     [ApiController]
     [Route("api/events/{eventId:int}/seats")]
-    public class SeatController :
-        ControllerBase
+    [Authorize]
+    public class SeatController : ControllerBase
     {
         private readonly ISeatService _service;
 
@@ -18,16 +18,16 @@ namespace EventParkingReservation.Controllers
             _service = service;
         }
 
+        // Admin + Customer can see seat map
         [HttpGet]
-        public async Task<IActionResult>
-            GetByEvent(int eventId)
+        [Authorize(Roles = "Admin,Customer")]
+        public async Task<IActionResult> GetMap(
+            int eventId)
         {
             try
             {
                 return Ok(
-                    await _service
-                        .GetByEventAsync(
-                            eventId));
+                    await _service.GetByEventIdAsync(eventId));
             }
             catch (KeyNotFoundException ex)
             {
@@ -38,32 +38,34 @@ namespace EventParkingReservation.Controllers
             }
         }
 
+        // ADMIN ONLY
         [HttpPost]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult>
-            Create(
-                int eventId,
-                CreateSeatDto dto)
+        public async Task<IActionResult> Create(
+            int eventId,
+            CreateSeatDto dto)
         {
             try
             {
                 var result =
-                    await _service
-                        .CreateAsync(
-                            eventId,
-                            dto);
+                    await _service.CreateAsync(
+                        eventId,
+                        dto);
 
-                return StatusCode(
-                    StatusCodes
-                        .Status201Created,
+                return Created(
+                    $"/api/events/{eventId}/seats/{result.SeatId}",
                     result);
             }
-            catch (Exception ex)
-                when (
-                    ex is KeyNotFoundException ||
-                    ex is InvalidOperationException)
+            catch (KeyNotFoundException ex)
             {
-                return BadRequest(new
+                return NotFound(new
+                {
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new
                 {
                     message = ex.Message
                 });
@@ -72,20 +74,18 @@ namespace EventParkingReservation.Controllers
 
         [HttpPut("{seatId:int}")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult>
-            Update(
-                int eventId,
-                int seatId,
-                UpdateSeatDto dto)
+        public async Task<IActionResult> Update(
+            int eventId,
+            int seatId,
+            UpdateSeatDto dto)
         {
             try
             {
                 return Ok(
-                    await _service
-                        .UpdateAsync(
-                            eventId,
-                            seatId,
-                            dto));
+                    await _service.UpdateAsync(
+                        eventId,
+                        seatId,
+                        dto));
             }
             catch (KeyNotFoundException ex)
             {
@@ -105,17 +105,15 @@ namespace EventParkingReservation.Controllers
 
         [HttpDelete("{seatId:int}")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult>
-            Delete(
-                int eventId,
-                int seatId)
+        public async Task<IActionResult> Delete(
+            int eventId,
+            int seatId)
         {
             try
             {
-                await _service
-                    .DeleteAsync(
-                        eventId,
-                        seatId);
+                await _service.DeleteAsync(
+                    eventId,
+                    seatId);
 
                 return NoContent();
             }

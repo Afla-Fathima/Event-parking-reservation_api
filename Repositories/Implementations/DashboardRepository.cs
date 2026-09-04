@@ -5,99 +5,109 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EventParkingReservation.Repositories.Implementations
 {
-    public class DashboardRepository :
-        IDashboardRepository
+    public class DashboardRepository : IDashboardRepository
     {
-        private readonly ApplicationDbContext _context;
+        private readonly ApplicationDbContext _db;
 
         public DashboardRepository(
-            ApplicationDbContext context)
+            ApplicationDbContext db)
         {
-            _context = context;
+            _db = db;
         }
 
         public async Task<CustomerDashboardDto>
-            GetCustomerDashboardAsync(
+            GetCustomerAsync(
                 int customerId)
         {
-            DateOnly today =
-                DateOnly.FromDateTime(DateTime.Today);
+            var today =
+                DateOnly.FromDateTime(
+                    DateTime.Today);
+
+            var upcomingBookings =
+                await _db.Bookings
+                    .CountAsync(x =>
+                        x.CustomerId == customerId &&
+                        x.Status != "Cancelled" &&
+                        x.Status != "Expired" &&
+                        x.Event != null &&
+                        x.Event.EventDate >= today);
+
+            var reservedParking =
+                await _db.ParkingReservations
+                    .CountAsync(x =>
+                        x.Booking != null &&
+                        x.Booking.CustomerId ==
+                            customerId &&
+                        x.Status == "Active");
+
+            var recentPayments =
+                await _db.Payments
+                    .CountAsync(x =>
+                        x.Booking != null &&
+                        x.Booking.CustomerId ==
+                            customerId);
+
+            var unreadNotifications =
+                await _db.Notifications
+                    .CountAsync(x =>
+                        x.CustomerId ==
+                            customerId &&
+                        !x.IsRead);
 
             return new CustomerDashboardDto
             {
                 UpcomingBookings =
-                    await _context.Bookings
-                        .Include(x => x.Event)
-                        .CountAsync(x =>
-                            x.CustomerId ==
-                                customerId &&
-                            x.Status !=
-                                "Cancelled" &&
-                            x.Event != null &&
-                            x.Event.EventDate >=
-                                today),
+                    upcomingBookings,
 
                 ReservedParking =
-                    await _context
-                        .ParkingReservations
-                        .Include(x => x.Booking)
-                        .CountAsync(x =>
-                            x.Booking != null &&
-                            x.Booking.CustomerId ==
-                                customerId &&
-                            x.Status ==
-                                "Active"),
+                    reservedParking,
 
                 RecentPayments =
-                    await _context.Payments
-                        .Include(x => x.Booking)
-                        .CountAsync(x =>
-                            x.Booking != null &&
-                            x.Booking.CustomerId ==
-                                customerId),
+                    recentPayments,
 
                 UnreadNotifications =
-                    await _context
-                        .Notifications
-                        .CountAsync(x =>
-                            x.CustomerId ==
-                                customerId &&
-                            !x.IsRead)
+                    unreadNotifications
             };
         }
 
         public async Task<AdminDashboardDto>
-            GetAdminDashboardAsync()
+            GetAdminAsync()
         {
+            var totalRevenue =
+                await _db.Payments
+                    .Where(x =>
+                        x.Status == "Completed")
+                    .SumAsync(x =>
+                        (decimal?)x.Amount)
+                ?? 0;
+
             return new AdminDashboardDto
             {
                 TotalEvents =
-                    await _context.Events.CountAsync(),
+                    await _db.Events
+                        .CountAsync(),
 
                 TotalBookings =
-                    await _context.Bookings.CountAsync(),
+                    await _db.Bookings
+                        .CountAsync(),
 
                 AvailableSeats =
-                    await _context.Seats.CountAsync(x =>
-                        x.Status == "Available"),
+                    await _db.Seats
+                        .CountAsync(x =>
+                            x.Status ==
+                                "Available"),
 
                 OccupiedParkingSlots =
-                    await _context.ParkingSlots
+                    await _db.ParkingSlots
                         .CountAsync(x =>
                             x.Status ==
                                 "Occupied"),
 
                 TotalRevenue =
-                    await _context.Payments
-                        .Where(x =>
-                            x.Status ==
-                                "Completed")
-                        .SumAsync(x =>
-                            (decimal?)x.Amount)
-                    ?? 0,
+                    totalRevenue,
 
                 TotalCustomers =
-                    await _context.Customers
+                    await _db.Customers
                         .CountAsync(x =>
                             x.Role ==
                                 "Customer")

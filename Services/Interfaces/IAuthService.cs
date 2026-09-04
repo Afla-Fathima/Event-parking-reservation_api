@@ -11,6 +11,13 @@ namespace EventParkingReservation.Services.Interfaces
         Task<LoginResponseDto> LoginAsync(
             LoginRequestDto dto);
 
-        Task<bool> CheckEmailAsync(string email);
+        Task<bool> CheckEmailAsync(
+            string email);
+
+        Task<string> ForgotPasswordAsync(
+            ForgotPasswordDto dto);
+
+        Task ResetPasswordAsync(
+            ResetPasswordDto dto);
     }
 }

@@ -4,21 +4,33 @@ namespace EventParkingReservation.Repositories.Interfaces
 {
     public interface ISeatRepository
     {
-        Task<IEnumerable<Seat>> GetByEventIdAsync(int eventId);
+        Task<List<Seat>> GetByEventIdAsync(
+            int eventId);
 
-        Task<Seat?> GetByIdAsync(int seatId);
+        Task<Seat?> GetByIdAsync(
+            int seatId);
 
-        Task<bool> SeatNumberExistsAsync(
+        Task<Event?> GetEventAsync(
+            int eventId);
+
+        Task<int> CountByEventAsync(
+            int eventId);
+
+        Task<bool> NumberExistsAsync(
             int eventId,
-            string seatNumber,
-            int? excludeSeatId = null);
+            string number,
+            int? excludeId = null);
 
-        Task<bool> HasActiveBookingAsync(int seatId);
+        Task<bool> HasActiveBookingAsync(
+            int seatId);
 
-        Task AddAsync(Seat seat);
+        Task AddAsync(
+            Seat seat);
 
-        Task UpdateAsync(Seat seat);
+        Task UpdateAsync(
+            Seat seat);
 
-        Task DeleteAsync(Seat seat);
+        Task DeleteAsync(
+            Seat seat);
     }
 }

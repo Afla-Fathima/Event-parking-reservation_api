@@ -1,6 +1,7 @@
 using System.Text;
-using EventParkingReservation.Services.Implementations;
+using EventParkingReservation.BackgroundServices;
 using EventParkingReservation.Data;
+using EventParkingReservation.Middleware;
 using EventParkingReservation.Repositories.Implementations;
 using EventParkingReservation.Repositories.Interfaces;
 using EventParkingReservation.Services.Implementations;
@@ -13,31 +14,36 @@ using Microsoft.OpenApi.Models;
 var builder =
     WebApplication.CreateBuilder(args);
 
-// ============================================
+// =====================================================
 // CONTROLLERS
-// ============================================
+// =====================================================
 
 builder.Services.AddControllers();
 
-builder.Services
-    .AddEndpointsApiExplorer();
+builder.Services.AddEndpointsApiExplorer();
 
-// ============================================
+// =====================================================
 // DATABASE
-// ============================================
+// =====================================================
 
-builder.Services.AddDbContext<
-    ApplicationDbContext>(options =>
-    {
-        options.UseSqlServer(
-            builder.Configuration
-                .GetConnectionString(
-                    "DefaultConnection"));
-    });
+string connectionString =
+    builder.Configuration
+        .GetConnectionString(
+            "DefaultConnection")
+    ?? throw new InvalidOperationException(
+        "DefaultConnection is missing.");
 
-// ============================================
+builder.Services
+    .AddDbContext<ApplicationDbContext>(
+        options =>
+        {
+            options.UseSqlServer(
+                connectionString);
+        });
+
+// =====================================================
 // CORS - ANGULAR
-// ============================================
+// =====================================================
 
 builder.Services.AddCors(options =>
 {
@@ -53,9 +59,9 @@ builder.Services.AddCors(options =>
         });
 });
 
-// ============================================
+// =====================================================
 // REPOSITORIES
-// ============================================
+// =====================================================
 
 builder.Services.AddScoped<
     IAuthRepository,
@@ -101,9 +107,9 @@ builder.Services.AddScoped<
     IDashboardRepository,
     DashboardRepository>();
 
-// ============================================
+// =====================================================
 // SERVICES
-// ============================================
+// =====================================================
 
 builder.Services.AddScoped<
     IAuthService,
@@ -149,9 +155,16 @@ builder.Services.AddScoped<
     IDashboardService,
     DashboardService>();
 
-// ============================================
+// =====================================================
+// BACKGROUND WORKER
+// =====================================================
+
+builder.Services.AddHostedService<
+    BookingExpiryService>();
+
+// =====================================================
 // JWT SETTINGS
-// ============================================
+// =====================================================
 
 string jwtKey =
     builder.Configuration["Jwt:Key"]
@@ -168,20 +181,22 @@ string jwtAudience =
     ?? throw new InvalidOperationException(
         "JWT Audience is missing.");
 
-// ============================================
+// =====================================================
 // AUTHENTICATION
-// ============================================
+// =====================================================
 
 builder.Services
     .AddAuthentication(options =>
     {
-        options
-            .DefaultAuthenticateScheme =
+        options.DefaultAuthenticateScheme =
             JwtBearerDefaults
                 .AuthenticationScheme;
 
-        options
-            .DefaultChallengeScheme =
+        options.DefaultChallengeScheme =
+            JwtBearerDefaults
+                .AuthenticationScheme;
+
+        options.DefaultScheme =
             JwtBearerDefaults
                 .AuthenticationScheme;
     })
@@ -216,8 +231,8 @@ builder.Services
 
                 IssuerSigningKey =
                     new SymmetricSecurityKey(
-                        Encoding.UTF8
-                            .GetBytes(jwtKey)),
+                        Encoding.UTF8.GetBytes(
+                            jwtKey)),
 
                 RoleClaimType =
                     System.Security.Claims
@@ -232,12 +247,11 @@ builder.Services
             };
     });
 
-builder.Services
-    .AddAuthorization();
+builder.Services.AddAuthorization();
 
-// ============================================
-// SWAGGER + AUTHORIZE BUTTON
-// ============================================
+// =====================================================
+// SWAGGER + JWT AUTHORIZE BUTTON
+// =====================================================
 
 builder.Services.AddSwaggerGen(options =>
 {
@@ -249,7 +263,10 @@ builder.Services.AddSwaggerGen(options =>
                 "Event Parking Reservation API",
 
             Version =
-                "v1"
+                "v1",
+
+            Description =
+                "Event and Parking Reservation System API"
         });
 
     options.AddSecurityDefinition(
@@ -272,7 +289,7 @@ builder.Services.AddSwaggerGen(options =>
                 ParameterLocation.Header,
 
             Description =
-                "Enter JWT token"
+                "Enter the JWT token generated by /api/Auth/login."
         });
 
     options.AddSecurityRequirement(
@@ -285,8 +302,7 @@ builder.Services.AddSwaggerGen(options =>
                         new OpenApiReference
                         {
                             Type =
-                                ReferenceType
-                                    .SecurityScheme,
+                                ReferenceType.SecurityScheme,
 
                             Id =
                                 "Bearer"
@@ -298,34 +314,65 @@ builder.Services.AddSwaggerGen(options =>
         });
 });
 
+// =====================================================
+// BUILD
+// =====================================================
+
 var app =
     builder.Build();
 
-// ============================================
+// =====================================================
+// GLOBAL EXCEPTION HANDLER
+// =====================================================
+
+app.UseMiddleware<
+    ExceptionMiddleware>();
+
+// =====================================================
 // SWAGGER
-// ============================================
+// =====================================================
 
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
 
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint(
+            "/swagger/v1/swagger.json",
+            "Event Parking Reservation API v1");
+
+        options.DocumentTitle =
+            "Event Parking Reservation API";
+    });
 }
 
-// ============================================
-// PIPELINE
-// ============================================
+// =====================================================
+// HTTP PIPELINE
+// =====================================================
 
 app.UseHttpsRedirection();
 
 app.UseCors(
     "AngularFrontend");
 
-// IMPORTANT ORDER
+// IMPORTANT:
+// Authentication before Authorization.
 app.UseAuthentication();
 
 app.UseAuthorization();
 
 app.MapControllers();
+
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+
+    var dbContext =
+        scope.ServiceProvider
+            .GetRequiredService<ApplicationDbContext>();
+
+    await AdminSeeder.SeedAsync(dbContext);
+}
 
 app.Run();

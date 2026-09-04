@@ -1,145 +1,120 @@
-using EventParkingReservation.Services.Implementations;
 using EventParkingReservation.DTOs.Booking;
 using EventParkingReservation.Models;
-using EventParkingReservation.Repositories.Implementations;
 using EventParkingReservation.Repositories.Interfaces;
 using EventParkingReservation.Services.Interfaces;
 
 namespace EventParkingReservation.Services.Implementations
 {
-    public class BookingService :
-        IBookingService
+    public class BookingService : IBookingService
     {
-        private readonly IBookingRepository
-        _bookingRepository;
-
-        private readonly ICustomerRepository
-        _customerRepository;
-
-        private readonly IEventRepository
-            _eventRepository;
+        private readonly IBookingRepository _repo;
         private readonly INotificationService
-            _notificationService;
+            _notifications;
 
         public BookingService(
-            IBookingRepository bookingRepository,
-            ICustomerRepository customerRepository,
-            IEventRepository eventRepository,
-            INotificationService notificationService)
+            IBookingRepository repo,
+            INotificationService notifications)
         {
-            _bookingRepository =
-                bookingRepository;
-
-            _customerRepository =
-                customerRepository;
-
-            _eventRepository =
-                eventRepository;
-
-            _notificationService =
-                notificationService;
-        }
-
-        public async Task<IEnumerable<BookingResponseDto>>
-            GetAllAsync(int? eventId)
-        {
-            var bookings =
-                await _bookingRepository
-                    .GetAllAsync(eventId);
-
-            return bookings.Select(Map);
-        }
-
-        public async Task<IEnumerable<BookingResponseDto>>
-            GetByCustomerAsync(int customerId)
-        {
-            var bookings =
-                await _bookingRepository
-                    .GetByCustomerAsync(customerId);
-
-            return bookings.Select(Map);
+            _repo = repo;
+            _notifications = notifications;
         }
 
         public async Task<BookingResponseDto>
-            GetByIdAsync(int bookingId)
-        {
-            var booking =
-                await _bookingRepository
-                    .GetByIdAsync(bookingId)
-                ?? throw new KeyNotFoundException(
-                    "Booking not found.");
-
-            return Map(booking);
-        }
-
-        public async Task<BookingResponseDto>
-            CreateAsync(CreateBookingDto dto)
+            CreateAsync(
+                CreateBookingDto dto)
         {
             if (dto.SeatIds == null ||
                 dto.SeatIds.Count == 0)
             {
                 throw new InvalidOperationException(
-                    "At least one seat must be selected.");
+                    "A booking must contain at least one seat.");
             }
 
-            var customer =
-                await _customerRepository
-                    .GetByIdAsync(dto.CustomerId)
-                ?? throw new KeyNotFoundException(
-                    "Customer not found.");
-
-            var eventEntity =
-                await _eventRepository
-                    .GetByIdAsync(dto.EventId)
-                ?? throw new KeyNotFoundException(
-                    "Event not found.");
-
-            var booking = new Booking
+            if (dto.SeatIds.Distinct().Count() !=
+                dto.SeatIds.Count)
             {
-                BookingNumber =
-                    GenerateBookingNumber(),
+                throw new InvalidOperationException(
+                    "The same seat cannot be selected twice.");
+            }
 
-                CustomerId =
-                    dto.CustomerId,
+            if (!await _repo.CustomerExistsAsync(
+                    dto.CustomerId))
+            {
+                throw new InvalidOperationException(
+                    "Customer not found or inactive.");
+            }
 
-                EventId =
-                    dto.EventId,
+            var eventItem =
+                await _repo.GetEventAsync(
+                    dto.EventId);
 
-                BookingDate =
-                    DateTime.UtcNow,
+            if (eventItem == null)
+            {
+                throw new KeyNotFoundException(
+                    "Event not found.");
+            }
 
-                Status =
-                    "Pending",
+            var booking =
+                new Booking
+                {
+                    BookingNumber =
+                        $"BKG-{DateTime.UtcNow:yyyyMMddHHmmss}-" +
+                        Guid.NewGuid()
+                            .ToString("N")[..5]
+                            .ToUpperInvariant(),
 
-                PaymentStatus =
-                    "Pending"
-            };
+                    CustomerId =
+                        dto.CustomerId,
 
-            await _bookingRepository
-                .CreateReservationAsync(
-                    booking,
-                    dto.SeatIds,
-                    dto.ParkingSlotId);
+                    EventId =
+                        dto.EventId,
 
-            await _notificationService
-                .CreateAsync(
-                    customer.CustomerId,
-                    "Booking Created",
-                    $"Booking {booking.BookingNumber} was created for {eventEntity.EventName}.",
-                    "Booking");
+                    BookingDate =
+                        DateTime.UtcNow,
 
-            var result =
-                await _bookingRepository
-                    .GetByIdAsync(
-                        booking.BookingId);
+                    HoldExpiresAt =
+                        DateTime.UtcNow
+                            .AddMinutes(15),
 
-            return Map(result!);
+                    Status =
+                        "Pending",
+
+                    PaymentStatus =
+                        "Pending",
+
+                    TotalAmount =
+                        0
+                };
+
+            var created =
+                await _repo
+                    .CreateReservationAsync(
+                        booking,
+                        dto.SeatIds,
+                        dto.ParkingSlotId);
+
+            await _notifications.CreateAsync(
+                created.CustomerId,
+                "Booking Created",
+                $"Booking {created.BookingNumber} is pending payment.",
+                "Booking");
+
+            return Map(created);
         }
 
-        public async Task AddSeatsAsync(
-            int bookingId,
-            AttachSeatsDto dto)
+        public async Task<BookingResponseDto>
+            AddSeatsAsync(
+                int bookingId,
+                int customerId,
+                AttachSeatsDto dto)
         {
+            var booking =
+                await RequireOwnedBookingAsync(
+                    bookingId,
+                    customerId);
+
+            EnsurePending(booking);
+
             if (dto.SeatIds == null ||
                 dto.SeatIds.Count == 0)
             {
@@ -147,96 +122,163 @@ namespace EventParkingReservation.Services.Implementations
                     "At least one seat is required.");
             }
 
-            var booking =
-                await _bookingRepository
-                    .GetByIdAsync(bookingId)
-                ?? throw new KeyNotFoundException(
-                    "Booking not found.");
-
-            if (booking.Status != "Pending")
-            {
-                throw new InvalidOperationException(
-                    "Seats can only be changed while booking is pending.");
-            }
-
-            await _bookingRepository
-                .AddSeatsAsync(
+            var updated =
+                await _repo.AddSeatsAsync(
                     bookingId,
                     dto.SeatIds);
+
+            return Map(updated);
         }
 
-        public async Task ReserveParkingAsync(
-            int bookingId,
-            ReserveParkingDto dto)
+        public async Task<BookingResponseDto>
+            ReserveParkingAsync(
+                int bookingId,
+                int customerId,
+                ReserveParkingDto dto)
         {
             var booking =
-                await _bookingRepository
-                    .GetByIdAsync(bookingId)
-                ?? throw new KeyNotFoundException(
-                    "Booking not found.");
-
-            if (booking.Status != "Pending")
-            {
-                throw new InvalidOperationException(
-                    "Parking can only be changed while booking is pending.");
-            }
-
-            await _bookingRepository
-                .ReserveParkingAsync(
+                await RequireOwnedBookingAsync(
                     bookingId,
-                    dto.ParkingSlotId);
+                    customerId);
+
+            EnsurePending(booking);
+
+            var updated =
+                await _repo
+                    .ReserveParkingAsync(
+                        bookingId,
+                        dto.ParkingSlotId);
+
+            return Map(updated);
         }
 
-        public async Task RemoveParkingAsync(
-            int bookingId)
+        public async Task<BookingResponseDto>
+            RemoveParkingAsync(
+                int bookingId,
+                int customerId)
         {
             var booking =
-                await _bookingRepository
-                    .GetByIdAsync(bookingId)
-                ?? throw new KeyNotFoundException(
-                    "Booking not found.");
+                await RequireOwnedBookingAsync(
+                    bookingId,
+                    customerId);
 
-            if (booking.Status != "Pending")
-            {
-                throw new InvalidOperationException(
-                    "Parking cannot be removed after booking is finalized.");
-            }
+            EnsurePending(booking);
 
-            await _bookingRepository
-                .RemoveParkingAsync(bookingId);
+            var updated =
+                await _repo
+                    .RemoveParkingAsync(
+                        bookingId);
+
+            return Map(updated);
+        }
+
+        public async Task<BookingResponseDto?>
+            GetByIdAsync(
+                int id)
+        {
+            var booking =
+                await _repo.GetByIdAsync(id);
+
+            return booking == null
+                ? null
+                : Map(booking);
+        }
+
+        public async Task<List<BookingResponseDto>>
+            GetByCustomerAsync(
+                int customerId)
+        {
+            var bookings =
+                await _repo.GetByCustomerAsync(
+                    customerId);
+
+            return bookings
+                .Select(Map)
+                .ToList();
+        }
+
+        public async Task<List<BookingResponseDto>>
+            GetByEventAsync(
+                int eventId)
+        {
+            var bookings =
+                await _repo.GetByEventAsync(
+                    eventId);
+
+            return bookings
+                .Select(Map)
+                .ToList();
         }
 
         public async Task CancelAsync(
-            int bookingId)
+            int id)
         {
             var booking =
-                await _bookingRepository
-                    .GetByIdAsync(bookingId)
+                await _repo.GetByIdAsync(id)
                 ?? throw new KeyNotFoundException(
                     "Booking not found.");
 
-            if (booking.Status == "Cancelled")
+            if (booking.Status ==
+                "Cancelled")
             {
                 throw new InvalidOperationException(
                     "Booking is already cancelled.");
             }
 
-            await _bookingRepository
-                .CancelAsync(booking);
+            if (booking.Status ==
+                "Expired")
+            {
+                throw new InvalidOperationException(
+                    "Expired booking cannot be cancelled.");
+            }
 
-            await _notificationService
-                .CreateAsync(
-                    booking.CustomerId,
-                    "Booking Cancelled",
-                    $"Booking {booking.BookingNumber} has been cancelled.",
-                    "Cancellation");
+            await _repo.CancelAsync(
+                booking);
+
+            await _notifications.CreateAsync(
+                booking.CustomerId,
+                "Booking Cancelled",
+                $"Booking {booking.BookingNumber} was cancelled.",
+                "Cancellation");
         }
 
-        private static string
-            GenerateBookingNumber()
+        private async Task<Booking>
+            RequireOwnedBookingAsync(
+                int bookingId,
+                int customerId)
         {
-            return
-                $"BKG-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..5].ToUpper()}";
+            var booking =
+                await _repo.GetByIdAsync(
+                    bookingId)
+                ?? throw new KeyNotFoundException(
+                    "Booking not found.");
+
+            if (booking.CustomerId !=
+                customerId)
+            {
+                throw new UnauthorizedAccessException(
+                    "You cannot access this booking.");
+            }
+
+            return booking;
+        }
+
+        private static void EnsurePending(
+            Booking booking)
+        {
+            if (booking.Status != "Pending")
+            {
+                throw new InvalidOperationException(
+                    "Only pending bookings can be modified.");
+            }
+
+            if (booking.HoldExpiresAt.HasValue &&
+                booking.HoldExpiresAt.Value <=
+                    DateTime.UtcNow)
+            {
+                throw new InvalidOperationException(
+                    "Booking hold has expired.");
+            }
         }
 
         private static BookingResponseDto Map(
@@ -290,14 +332,13 @@ namespace EventParkingReservation.Services.Implementations
                         .ToList(),
 
                 ParkingSlot =
-                    booking
-                        .ParkingReservation?
-                        .Status ==
+                    booking.ParkingReservation != null &&
+                    booking.ParkingReservation.Status ==
                         "Active"
                         ? booking
                             .ParkingReservation
-                            .ParkingSlot?
-                            .SlotNumber
+                            .ParkingSlot
+                            ?.SlotNumber
                         : null
             };
         }

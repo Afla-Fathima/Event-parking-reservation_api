@@ -4,11 +4,9 @@ namespace EventParkingReservation.Services.Interfaces
 {
     public interface IDashboardService
     {
-        Task<CustomerDashboardDto>
-            GetCustomerDashboardAsync(
-                int customerId);
+        Task<CustomerDashboardDto> GetCustomerAsync(
+            int customerId);
 
-        Task<AdminDashboardDto>
-            GetAdminDashboardAsync();
+        Task<AdminDashboardDto> GetAdminAsync();
     }
 }

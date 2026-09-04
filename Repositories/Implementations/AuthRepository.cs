@@ -9,35 +9,60 @@ namespace EventParkingReservation.Repositories.Implementations
     {
         private readonly ApplicationDbContext _context;
 
-        public AuthRepository(ApplicationDbContext context)
+        public AuthRepository(
+            ApplicationDbContext context)
         {
             _context = context;
         }
 
-        public async Task<Customer?> GetByEmailAsync(string email)
+        public async Task<Customer?> GetByEmailAsync(
+            string email)
         {
             return await _context.Customers
-                .FirstOrDefaultAsync(x => x.Email == email);
+                .FirstOrDefaultAsync(c =>
+                    c.Email == email);
         }
 
-        public async Task<Customer?> GetByIdAsync(int customerId)
-        {
-            return await _context.Customers.FindAsync(customerId);
-        }
-
-        public async Task<bool> EmailExistsAsync(string email)
+        public async Task<Customer?> GetByIdAsync(
+            int customerId)
         {
             return await _context.Customers
-                .AnyAsync(x => x.Email == email);
+                .FirstOrDefaultAsync(c =>
+                    c.CustomerId == customerId);
         }
 
-        public async Task<Customer> AddAsync(Customer customer)
+        public async Task<Customer?> GetByPasswordResetTokenAsync(
+            string token)
+        {
+            return await _context.Customers
+                .FirstOrDefaultAsync(c =>
+                    c.PasswordResetToken == token);
+        }
+
+        public async Task<bool> EmailExistsAsync(
+            string email)
+        {
+            return await _context.Customers
+                .AnyAsync(c =>
+                    c.Email == email);
+        }
+
+        public async Task<Customer> AddAsync(
+            Customer customer)
         {
             _context.Customers.Add(customer);
 
             await _context.SaveChangesAsync();
 
             return customer;
+        }
+
+        public async Task UpdateAsync(
+            Customer customer)
+        {
+            _context.Customers.Update(customer);
+
+            await _context.SaveChangesAsync();
         }
     }
 }

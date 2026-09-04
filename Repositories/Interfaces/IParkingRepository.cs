@@ -4,21 +4,30 @@ namespace EventParkingReservation.Repositories.Interfaces
 {
     public interface IParkingRepository
     {
-        Task<IEnumerable<ParkingSlot>> GetByEventIdAsync(int eventId);
+        Task<List<ParkingSlot>> GetByEventIdAsync(
+            int eventId);
 
-        Task<ParkingSlot?> GetByIdAsync(int parkingSlotId);
+        Task<ParkingSlot?> GetByIdAsync(
+            int id);
 
-        Task<bool> SlotNumberExistsAsync(
+        Task<Event?> GetEventAsync(
+            int eventId);
+
+        Task<bool> NumberExistsAsync(
             int eventId,
-            string slotNumber,
+            string number,
             int? excludeId = null);
 
-        Task<bool> HasActiveReservationAsync(int parkingSlotId);
+        Task<bool> HasActiveReservationAsync(
+            int slotId);
 
-        Task AddAsync(ParkingSlot slot);
+        Task AddAsync(
+            ParkingSlot slot);
 
-        Task UpdateAsync(ParkingSlot slot);
+        Task UpdateAsync(
+            ParkingSlot slot);
 
-        Task DeleteAsync(ParkingSlot slot);
+        Task DeleteAsync(
+            ParkingSlot slot);
     }
 }

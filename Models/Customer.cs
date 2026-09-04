@@ -1,4 +1,3 @@
-using EventParkingReservation.Models;
 using System.ComponentModel.DataAnnotations;
 
 namespace EventParkingReservation.Models
@@ -31,7 +30,33 @@ namespace EventParkingReservation.Models
         [MaxLength(20)]
         public string Status { get; set; } = "Active";
 
+        // =====================================================
+        // EMAIL VERIFICATION
+        // =====================================================
+
+        public bool EmailVerified { get; set; } = false;
+
+        public string? EmailVerificationToken { get; set; }
+
+        public DateTime? EmailVerificationTokenExpiresAt { get; set; }
+
+        // =====================================================
+        // PASSWORD RESET
+        // =====================================================
+
+        public string? PasswordResetToken { get; set; }
+
+        public DateTime? PasswordResetTokenExpiresAt { get; set; }
+
+        // =====================================================
+        // AUDIT
+        // =====================================================
+
         public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
+
+        // =====================================================
+        // RELATIONSHIPS
+        // =====================================================
 
         public ICollection<Booking> Bookings { get; set; }
             = new List<Booking>();

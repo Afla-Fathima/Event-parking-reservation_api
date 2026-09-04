@@ -7,72 +7,93 @@ namespace EventParkingReservation.Repositories.Implementations
 {
     public class ParkingRepository : IParkingRepository
     {
-        private readonly ApplicationDbContext _context;
+        private readonly ApplicationDbContext _db;
 
         public ParkingRepository(
-            ApplicationDbContext context)
+            ApplicationDbContext db)
         {
-            _context = context;
+            _db = db;
         }
 
-        public async Task<IEnumerable<ParkingSlot>>
-            GetByEventIdAsync(int eventId)
+        public Task<List<ParkingSlot>>
+            GetByEventIdAsync(
+                int eventId)
         {
-            return await _context.ParkingSlots
-                .Where(x => x.EventId == eventId)
-                .OrderBy(x => x.SlotNumber)
+            return _db.ParkingSlots
                 .AsNoTracking()
+                .Where(x =>
+                    x.EventId == eventId)
+                .OrderBy(x =>
+                    x.SlotNumber)
                 .ToListAsync();
         }
 
-        public async Task<ParkingSlot?> GetByIdAsync(
-            int parkingSlotId)
+        public Task<ParkingSlot?> GetByIdAsync(
+            int id)
         {
-            return await _context.ParkingSlots
+            return _db.ParkingSlots
                 .FirstOrDefaultAsync(x =>
-                    x.ParkingSlotId == parkingSlotId);
+                    x.ParkingSlotId == id);
         }
 
-        public async Task<bool> SlotNumberExistsAsync(
+        public Task<Event?> GetEventAsync(
+            int eventId)
+        {
+            return _db.Events
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x =>
+                    x.EventId == eventId);
+        }
+
+        public Task<bool> NumberExistsAsync(
             int eventId,
-            string slotNumber,
+            string number,
             int? excludeId = null)
         {
-            return await _context.ParkingSlots.AnyAsync(x =>
+            return _db.ParkingSlots.AnyAsync(x =>
                 x.EventId == eventId &&
-                x.SlotNumber == slotNumber &&
-                (!excludeId.HasValue ||
-                 x.ParkingSlotId != excludeId.Value));
+                x.SlotNumber == number &&
+                (
+                    !excludeId.HasValue ||
+                    x.ParkingSlotId !=
+                        excludeId.Value
+                ));
         }
 
-        public async Task<bool> HasActiveReservationAsync(
-            int parkingSlotId)
+        public Task<bool>
+            HasActiveReservationAsync(
+                int slotId)
         {
-            return await _context.ParkingReservations
+            return _db.ParkingReservations
                 .AnyAsync(x =>
-                    x.ParkingSlotId == parkingSlotId &&
-                    x.Status == "Active");
+                    x.ParkingSlotId ==
+                        slotId &&
+                    x.Status ==
+                        "Active");
         }
 
-        public async Task AddAsync(ParkingSlot slot)
+        public async Task AddAsync(
+            ParkingSlot slot)
         {
-            _context.ParkingSlots.Add(slot);
+            _db.ParkingSlots.Add(slot);
 
-            await _context.SaveChangesAsync();
+            await _db.SaveChangesAsync();
         }
 
-        public async Task UpdateAsync(ParkingSlot slot)
+        public async Task UpdateAsync(
+            ParkingSlot slot)
         {
-            _context.ParkingSlots.Update(slot);
+            _db.ParkingSlots.Update(slot);
 
-            await _context.SaveChangesAsync();
+            await _db.SaveChangesAsync();
         }
 
-        public async Task DeleteAsync(ParkingSlot slot)
+        public async Task DeleteAsync(
+            ParkingSlot slot)
         {
-            _context.ParkingSlots.Remove(slot);
+            _db.ParkingSlots.Remove(slot);
 
-            await _context.SaveChangesAsync();
+            await _db.SaveChangesAsync();
         }
     }
 }

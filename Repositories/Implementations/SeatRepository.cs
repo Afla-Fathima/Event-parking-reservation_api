@@ -7,69 +7,95 @@ namespace EventParkingReservation.Repositories.Implementations
 {
     public class SeatRepository : ISeatRepository
     {
-        private readonly ApplicationDbContext _context;
+        private readonly ApplicationDbContext _db;
 
-        public SeatRepository(ApplicationDbContext context)
+        public SeatRepository(
+            ApplicationDbContext db)
         {
-            _context = context;
+            _db = db;
         }
 
-        public async Task<IEnumerable<Seat>> GetByEventIdAsync(
+        public Task<List<Seat>> GetByEventIdAsync(
             int eventId)
         {
-            return await _context.Seats
-                .Where(x => x.EventId == eventId)
-                .OrderBy(x => x.SeatNumber)
+            return _db.Seats
                 .AsNoTracking()
+                .Where(x =>
+                    x.EventId == eventId)
+                .OrderBy(x =>
+                    x.SeatNumber)
                 .ToListAsync();
         }
 
-        public async Task<Seat?> GetByIdAsync(int seatId)
+        public Task<Seat?> GetByIdAsync(
+            int seatId)
         {
-            return await _context.Seats
+            return _db.Seats
                 .FirstOrDefaultAsync(x =>
                     x.SeatId == seatId);
         }
 
-        public async Task<bool> SeatNumberExistsAsync(
-            int eventId,
-            string seatNumber,
-            int? excludeSeatId = null)
+        public Task<Event?> GetEventAsync(
+            int eventId)
         {
-            return await _context.Seats.AnyAsync(x =>
-                x.EventId == eventId &&
-                x.SeatNumber == seatNumber &&
-                (!excludeSeatId.HasValue ||
-                 x.SeatId != excludeSeatId.Value));
+            return _db.Events
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x =>
+                    x.EventId == eventId);
         }
 
-        public async Task<bool> HasActiveBookingAsync(
+        public Task<int> CountByEventAsync(
+            int eventId)
+        {
+            return _db.Seats.CountAsync(x =>
+                x.EventId == eventId);
+        }
+
+        public Task<bool> NumberExistsAsync(
+            int eventId,
+            string number,
+            int? excludeId = null)
+        {
+            return _db.Seats.AnyAsync(x =>
+                x.EventId == eventId &&
+                x.SeatNumber == number &&
+                (
+                    !excludeId.HasValue ||
+                    x.SeatId !=
+                        excludeId.Value
+                ));
+        }
+
+        public Task<bool> HasActiveBookingAsync(
             int seatId)
         {
-            return await _context.BookingSeats.AnyAsync(x =>
+            return _db.BookingSeats.AnyAsync(x =>
                 x.SeatId == seatId &&
                 x.Status == "Active");
         }
 
-        public async Task AddAsync(Seat seat)
+        public async Task AddAsync(
+            Seat seat)
         {
-            _context.Seats.Add(seat);
+            _db.Seats.Add(seat);
 
-            await _context.SaveChangesAsync();
+            await _db.SaveChangesAsync();
         }
 
-        public async Task UpdateAsync(Seat seat)
+        public async Task UpdateAsync(
+            Seat seat)
         {
-            _context.Seats.Update(seat);
+            _db.Seats.Update(seat);
 
-            await _context.SaveChangesAsync();
+            await _db.SaveChangesAsync();
         }
 
-        public async Task DeleteAsync(Seat seat)
+        public async Task DeleteAsync(
+            Seat seat)
         {
-            _context.Seats.Remove(seat);
+            _db.Seats.Remove(seat);
 
-            await _context.SaveChangesAsync();
+            await _db.SaveChangesAsync();
         }
     }
 }

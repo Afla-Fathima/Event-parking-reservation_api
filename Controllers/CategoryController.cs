@@ -6,12 +6,11 @@ using Microsoft.AspNetCore.Mvc;
 namespace EventParkingReservation.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
-    public class CategoryController :
-        ControllerBase
+    [Route("api/categories")]
+    [Authorize]
+    public class CategoryController : ControllerBase
     {
-        private readonly ICategoryService
-            _service;
+        private readonly ICategoryService _service;
 
         public CategoryController(
             ICategoryService service)
@@ -20,6 +19,7 @@ namespace EventParkingReservation.Controllers
         }
 
         [HttpGet]
+        [Authorize(Roles = "Admin,Customer")]
         public async Task<IActionResult> GetAll()
         {
             return Ok(
@@ -27,39 +27,38 @@ namespace EventParkingReservation.Controllers
         }
 
         [HttpGet("{id:int}")]
-        public async Task<IActionResult>
-            GetById(int id)
+        [Authorize(Roles = "Admin,Customer")]
+        public async Task<IActionResult> GetById(
+            int id)
         {
-            try
-            {
-                return Ok(
-                    await _service
-                        .GetByIdAsync(id));
-            }
-            catch (KeyNotFoundException ex)
+            var category =
+                await _service.GetByIdAsync(id);
+
+            if (category == null)
             {
                 return NotFound(new
                 {
-                    message = ex.Message
+                    message = "Category not found."
                 });
             }
+
+            return Ok(category);
         }
 
         [HttpPost]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult>
-            Create(CreateCategoryDto dto)
+        public async Task<IActionResult> Create(
+            CreateCategoryDto dto)
         {
             try
             {
-                var result =
-                    await _service
-                        .CreateAsync(dto);
+                var category =
+                    await _service.CreateAsync(dto);
 
-                return StatusCode(
-                    StatusCodes
-                        .Status201Created,
-                    result);
+                return CreatedAtAction(
+                    nameof(GetById),
+                    new { id = category.CategoryId },
+                    category);
             }
             catch (InvalidOperationException ex)
             {
@@ -72,18 +71,14 @@ namespace EventParkingReservation.Controllers
 
         [HttpPut("{id:int}")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult>
-            Update(
-                int id,
-                UpdateCategoryDto dto)
+        public async Task<IActionResult> Update(
+            int id,
+            UpdateCategoryDto dto)
         {
             try
             {
                 return Ok(
-                    await _service
-                        .UpdateAsync(
-                            id,
-                            dto));
+                    await _service.UpdateAsync(id, dto));
             }
             catch (KeyNotFoundException ex)
             {
@@ -103,8 +98,8 @@ namespace EventParkingReservation.Controllers
 
         [HttpDelete("{id:int}")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult>
-            Delete(int id)
+        public async Task<IActionResult> Delete(
+            int id)
         {
             try
             {
@@ -115,6 +110,13 @@ namespace EventParkingReservation.Controllers
             catch (KeyNotFoundException ex)
             {
                 return NotFound(new
+                {
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new
                 {
                     message = ex.Message
                 });

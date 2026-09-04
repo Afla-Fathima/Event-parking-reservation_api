@@ -8,163 +8,122 @@ namespace EventParkingReservation.Repositories.Implementations
 {
     public class BookingRepository : IBookingRepository
     {
-        private readonly ApplicationDbContext _context;
+        private readonly ApplicationDbContext _db;
 
         public BookingRepository(
-            ApplicationDbContext context)
+            ApplicationDbContext db)
         {
-            _context = context;
+            _db = db;
         }
 
-        public async Task<IEnumerable<Booking>>
-            GetAllAsync(int? eventId = null)
+        public Task<bool> CustomerExistsAsync(
+            int customerId)
         {
-            IQueryable<Booking> query =
-                _context.Bookings
-                    .Include(x => x.Customer)
-                    .Include(x => x.Event)
-                    .Include(x => x.BookingSeats)
-                        .ThenInclude(x => x.Seat)
-                    .Include(x => x.ParkingReservation)
-                        .ThenInclude(x => x!.ParkingSlot)
-                    .AsNoTracking();
-
-            if (eventId.HasValue)
-            {
-                query = query.Where(x =>
-                    x.EventId == eventId.Value);
-            }
-
-            return await query
-                .OrderByDescending(x => x.BookingDate)
-                .ToListAsync();
+            return _db.Customers.AnyAsync(x =>
+                x.CustomerId == customerId &&
+                x.Status == "Active" &&
+                x.Role == "Customer");
         }
 
-        public async Task<IEnumerable<Booking>>
-            GetByCustomerAsync(int customerId)
+        public Task<Event?> GetEventAsync(
+            int eventId)
         {
-            return await _context.Bookings
-                .Include(x => x.Customer)
-                .Include(x => x.Event)
-                .Include(x => x.BookingSeats)
-                    .ThenInclude(x => x.Seat)
-                .Include(x => x.ParkingReservation)
-                    .ThenInclude(x => x!.ParkingSlot)
-                .Where(x => x.CustomerId == customerId)
-                .OrderByDescending(x => x.BookingDate)
+            return _db.Events
                 .AsNoTracking()
-                .ToListAsync();
-        }
-
-        public async Task<Booking?> GetByIdAsync(
-            int bookingId)
-        {
-            return await _context.Bookings
-                .Include(x => x.Customer)
-                .Include(x => x.Event)
-                .Include(x => x.BookingSeats)
-                    .ThenInclude(x => x.Seat)
-                .Include(x => x.ParkingReservation)
-                    .ThenInclude(x => x!.ParkingSlot)
-                .Include(x => x.Payment)
                 .FirstOrDefaultAsync(x =>
-                    x.BookingId == bookingId);
+                    x.EventId == eventId);
         }
 
-        public async Task<Booking>
-            CreateReservationAsync(
-                Booking booking,
-                IEnumerable<int> seatIds,
-                int? parkingSlotId)
+        public async Task<Booking> CreateReservationAsync(
+            Booking booking,
+            IReadOnlyCollection<int> seatIds,
+            int? parkingSlotId)
         {
             await using var transaction =
-                await _context.Database
-                    .BeginTransactionAsync(
-                        IsolationLevel.Serializable);
+                await _db.Database.BeginTransactionAsync(
+                    IsolationLevel.Serializable);
 
             try
             {
-                List<int> ids =
-                    seatIds.Distinct().ToList();
+                var requestedSeatIds =
+                    seatIds
+                        .Distinct()
+                        .ToList();
 
-                if (ids.Count == 0)
+                if (requestedSeatIds.Count == 0)
                 {
                     throw new InvalidOperationException(
-                        "At least one seat is required.");
+                        "A booking must contain at least one seat.");
                 }
 
-                List<Seat> seats =
-                    await _context.Seats
+                var seats =
+                    await _db.Seats
                         .Where(x =>
-                            ids.Contains(x.SeatId) &&
-                            x.EventId == booking.EventId)
+                            requestedSeatIds.Contains(
+                                x.SeatId) &&
+                            x.EventId ==
+                                booking.EventId)
                         .ToListAsync();
 
-                if (seats.Count != ids.Count)
+                if (seats.Count !=
+                    requestedSeatIds.Count)
                 {
                     throw new InvalidOperationException(
-                        "One or more selected seats are invalid.");
+                        "One or more selected seats are invalid for this event.");
                 }
 
-                bool seatTaken =
-                    await _context.BookingSeats
-                        .AnyAsync(x =>
-                            ids.Contains(x.SeatId) &&
-                            x.Status == "Active");
+                var unavailableSeats =
+                    seats
+                        .Where(x =>
+                            x.Status != "Available")
+                        .Select(x => x.SeatId)
+                        .ToList();
 
-                if (seatTaken)
+                if (unavailableSeats.Count > 0)
                 {
                     throw new InvalidOperationException(
                         "One or more selected seats were already booked.");
                 }
 
-                ParkingSlot? slot = null;
+                ParkingSlot? parkingSlot = null;
 
                 if (parkingSlotId.HasValue)
                 {
-                    slot = await _context.ParkingSlots
-                        .FirstOrDefaultAsync(x =>
-                            x.ParkingSlotId ==
-                                parkingSlotId.Value &&
-                            x.EventId == booking.EventId);
-
-                    if (slot == null)
-                    {
-                        throw new InvalidOperationException(
-                            "Parking slot was not found.");
-                    }
-
-                    bool parkingTaken =
-                        await _context.ParkingReservations
-                            .AnyAsync(x =>
+                    parkingSlot =
+                        await _db.ParkingSlots
+                            .FirstOrDefaultAsync(x =>
                                 x.ParkingSlotId ==
                                     parkingSlotId.Value &&
-                                x.Status == "Active");
+                                x.EventId ==
+                                    booking.EventId);
 
-                    if (parkingTaken)
+                    if (parkingSlot == null)
                     {
                         throw new InvalidOperationException(
-                            "Parking slot is already reserved.");
+                            "Selected parking slot does not belong to this event.");
+                    }
+
+                    if (parkingSlot.Status !=
+                        "Available")
+                    {
+                        throw new InvalidOperationException(
+                            "Selected parking slot is already occupied.");
                     }
                 }
 
                 booking.TotalAmount =
-                    seats.Sum(x => x.Price);
+                    seats.Sum(x => x.Price) +
+                    (parkingSlot?.Fee ?? 0);
 
-                if (slot != null)
-                {
-                    booking.TotalAmount += slot.Fee;
-                }
+                _db.Bookings.Add(booking);
 
-                _context.Bookings.Add(booking);
+                await _db.SaveChangesAsync();
 
-                await _context.SaveChangesAsync();
-
-                foreach (Seat seat in seats)
+                foreach (var seat in seats)
                 {
                     seat.Status = "Booked";
 
-                    _context.BookingSeats.Add(
+                    _db.BookingSeats.Add(
                         new BookingSeat
                         {
                             BookingId =
@@ -181,11 +140,202 @@ namespace EventParkingReservation.Repositories.Implementations
                         });
                 }
 
-                if (slot != null)
+                if (parkingSlot != null)
                 {
-                    slot.Status = "Occupied";
+                    parkingSlot.Status =
+                        "Occupied";
 
-                    _context.ParkingReservations.Add(
+                    _db.ParkingReservations.Add(
+                        new ParkingReservation
+                        {
+                            BookingId =
+                                booking.BookingId,
+
+                            ParkingSlotId =
+                                parkingSlot
+                                    .ParkingSlotId,
+
+                            Fee =
+                                parkingSlot.Fee,
+
+                            Status =
+                                "Active",
+
+                            ReservedAt =
+                                DateTime.UtcNow
+                        });
+                }
+
+                await _db.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                return (await GetByIdAsync(
+                    booking.BookingId))!;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+
+                throw;
+            }
+        }
+
+        public async Task<Booking> AddSeatsAsync(
+            int bookingId,
+            IReadOnlyCollection<int> seatIds)
+        {
+            await using var transaction =
+                await _db.Database.BeginTransactionAsync(
+                    IsolationLevel.Serializable);
+
+            try
+            {
+                var booking =
+                    await _db.Bookings
+                        .FirstOrDefaultAsync(x =>
+                            x.BookingId ==
+                                bookingId)
+                    ?? throw new KeyNotFoundException(
+                        "Booking not found.");
+
+                EnsureEditable(booking);
+
+                var requestedSeatIds =
+                    seatIds
+                        .Distinct()
+                        .ToList();
+
+                if (requestedSeatIds.Count == 0)
+                {
+                    throw new InvalidOperationException(
+                        "At least one seat is required.");
+                }
+
+                if (requestedSeatIds.Count !=
+                    seatIds.Count)
+                {
+                    throw new InvalidOperationException(
+                        "The same seat cannot be selected twice.");
+                }
+
+                var seats =
+                    await _db.Seats
+                        .Where(x =>
+                            requestedSeatIds.Contains(
+                                x.SeatId) &&
+                            x.EventId ==
+                                booking.EventId)
+                        .ToListAsync();
+
+                if (seats.Count !=
+                    requestedSeatIds.Count)
+                {
+                    throw new InvalidOperationException(
+                        "One or more seats do not belong to this event.");
+                }
+
+                if (seats.Any(x =>
+                    x.Status != "Available"))
+                {
+                    throw new InvalidOperationException(
+                        "One or more selected seats were already booked.");
+                }
+
+                foreach (var seat in seats)
+                {
+                    seat.Status = "Booked";
+
+                    _db.BookingSeats.Add(
+                        new BookingSeat
+                        {
+                            BookingId =
+                                booking.BookingId,
+
+                            SeatId =
+                                seat.SeatId,
+
+                            SeatPrice =
+                                seat.Price,
+
+                            Status =
+                                "Active"
+                        });
+
+                    booking.TotalAmount +=
+                        seat.Price;
+                }
+
+                await _db.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                return (await GetByIdAsync(
+                    bookingId))!;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+
+                throw;
+            }
+        }
+
+        public async Task<Booking>
+            ReserveParkingAsync(
+                int bookingId,
+                int parkingSlotId)
+        {
+            await using var transaction =
+                await _db.Database.BeginTransactionAsync(
+                    IsolationLevel.Serializable);
+
+            try
+            {
+                var booking =
+                    await _db.Bookings
+                        .Include(x =>
+                            x.ParkingReservation)
+                        .ThenInclude(x =>
+                            x!.ParkingSlot)
+                        .FirstOrDefaultAsync(x =>
+                            x.BookingId ==
+                                bookingId)
+                    ?? throw new KeyNotFoundException(
+                        "Booking not found.");
+
+                EnsureEditable(booking);
+
+                if (booking.ParkingReservation != null &&
+                    booking.ParkingReservation.Status ==
+                        "Active")
+                {
+                    throw new InvalidOperationException(
+                        "This booking already has a parking reservation.");
+                }
+
+                var slot =
+                    await _db.ParkingSlots
+                        .FirstOrDefaultAsync(x =>
+                            x.ParkingSlotId ==
+                                parkingSlotId &&
+                            x.EventId ==
+                                booking.EventId)
+                    ?? throw new InvalidOperationException(
+                        "Parking slot does not belong to this event.");
+
+                if (slot.Status != "Available")
+                {
+                    throw new InvalidOperationException(
+                        "Parking slot is already occupied.");
+                }
+
+                slot.Status =
+                    "Occupied";
+
+                if (booking.ParkingReservation == null)
+                {
+                    _db.ParkingReservations.Add(
                         new ParkingReservation
                         {
                             BookingId =
@@ -204,12 +354,38 @@ namespace EventParkingReservation.Repositories.Implementations
                                 DateTime.UtcNow
                         });
                 }
+                else
+                {
+                    booking.ParkingReservation
+                        .ParkingSlotId =
+                            slot.ParkingSlotId;
 
-                await _context.SaveChangesAsync();
+                    booking.ParkingReservation
+                        .ParkingSlot =
+                            slot;
+
+                    booking.ParkingReservation
+                        .Fee =
+                            slot.Fee;
+
+                    booking.ParkingReservation
+                        .Status =
+                            "Active";
+
+                    booking.ParkingReservation
+                        .ReservedAt =
+                            DateTime.UtcNow;
+                }
+
+                booking.TotalAmount +=
+                    slot.Fee;
+
+                await _db.SaveChangesAsync();
 
                 await transaction.CommitAsync();
 
-                return booking;
+                return (await GetByIdAsync(
+                    bookingId))!;
             }
             catch
             {
@@ -219,149 +395,63 @@ namespace EventParkingReservation.Repositories.Implementations
             }
         }
 
-        public async Task AddSeatsAsync(
-            int bookingId,
-            IEnumerable<int> seatIds)
+        public async Task<Booking>
+            RemoveParkingAsync(
+                int bookingId)
         {
-            Booking booking =
-                await _context.Bookings
-                    .FirstOrDefaultAsync(x =>
-                        x.BookingId == bookingId)
-                ?? throw new KeyNotFoundException(
-                    "Booking not found.");
-
-            List<int> ids =
-                seatIds.Distinct().ToList();
-
             await using var transaction =
-                await _context.Database
-                    .BeginTransactionAsync(
-                        IsolationLevel.Serializable);
+                await _db.Database.BeginTransactionAsync(
+                    IsolationLevel.Serializable);
 
             try
             {
-                List<Seat> seats =
-                    await _context.Seats
-                        .Where(x =>
-                            ids.Contains(x.SeatId) &&
-                            x.EventId == booking.EventId)
-                        .ToListAsync();
-
-                if (seats.Count != ids.Count)
-                {
-                    throw new InvalidOperationException(
-                        "Invalid seat selection.");
-                }
-
-                bool taken =
-                    await _context.BookingSeats
-                        .AnyAsync(x =>
-                            ids.Contains(x.SeatId) &&
-                            x.Status == "Active");
-
-                if (taken)
-                {
-                    throw new InvalidOperationException(
-                        "One or more seats are already booked.");
-                }
-
-                foreach (Seat seat in seats)
-                {
-                    seat.Status = "Booked";
-
-                    booking.TotalAmount +=
-                        seat.Price;
-
-                    _context.BookingSeats.Add(
-                        new BookingSeat
-                        {
-                            BookingId = bookingId,
-                            SeatId = seat.SeatId,
-                            SeatPrice = seat.Price,
-                            Status = "Active"
-                        });
-                }
-
-                await _context.SaveChangesAsync();
-
-                await transaction.CommitAsync();
-            }
-            catch
-            {
-                await transaction.RollbackAsync();
-
-                throw;
-            }
-        }
-
-        public async Task ReserveParkingAsync(
-            int bookingId,
-            int parkingSlotId)
-        {
-            Booking booking =
-                await _context.Bookings
-                    .Include(x =>
-                        x.ParkingReservation)
-                    .FirstOrDefaultAsync(x =>
-                        x.BookingId == bookingId)
-                ?? throw new KeyNotFoundException(
-                    "Booking not found.");
-
-            if (booking.ParkingReservation != null &&
-                booking.ParkingReservation.Status ==
-                    "Active")
-            {
-                throw new InvalidOperationException(
-                    "Booking already has parking.");
-            }
-
-            await using var transaction =
-                await _context.Database
-                    .BeginTransactionAsync(
-                        IsolationLevel.Serializable);
-
-            try
-            {
-                ParkingSlot slot =
-                    await _context.ParkingSlots
+                var booking =
+                    await _db.Bookings
+                        .Include(x =>
+                            x.ParkingReservation)
+                        .ThenInclude(x =>
+                            x!.ParkingSlot)
                         .FirstOrDefaultAsync(x =>
-                            x.ParkingSlotId ==
-                                parkingSlotId &&
-                            x.EventId ==
-                                booking.EventId)
+                            x.BookingId ==
+                                bookingId)
                     ?? throw new KeyNotFoundException(
-                        "Parking slot not found.");
+                        "Booking not found.");
 
-                bool taken =
-                    await _context.ParkingReservations
-                        .AnyAsync(x =>
-                            x.ParkingSlotId ==
-                                parkingSlotId &&
-                            x.Status == "Active");
+                EnsureEditable(booking);
 
-                if (taken)
+                var reservation =
+                    booking.ParkingReservation;
+
+                if (reservation == null ||
+                    reservation.Status != "Active")
                 {
                     throw new InvalidOperationException(
-                        "Parking slot is already reserved.");
+                        "This booking has no active parking reservation.");
                 }
 
-                slot.Status = "Occupied";
+                reservation.Status =
+                    "Released";
 
-                booking.TotalAmount += slot.Fee;
+                if (reservation.ParkingSlot != null)
+                {
+                    reservation
+                        .ParkingSlot
+                        .Status =
+                            "Available";
+                }
 
-                _context.ParkingReservations.Add(
-                    new ParkingReservation
-                    {
-                        BookingId = bookingId,
-                        ParkingSlotId =
-                            parkingSlotId,
-                        Fee = slot.Fee,
-                        Status = "Active"
-                    });
+                booking.TotalAmount =
+                    Math.Max(
+                        0m,
+                        booking.TotalAmount -
+                        reservation.Fee);
 
-                await _context.SaveChangesAsync();
+                await _db.SaveChangesAsync();
 
                 await transaction.CommitAsync();
+
+                return (await GetByIdAsync(
+                    bookingId))!;
             }
             catch
             {
@@ -371,92 +461,168 @@ namespace EventParkingReservation.Repositories.Implementations
             }
         }
 
-        public async Task RemoveParkingAsync(
-            int bookingId)
+        public Task<Booking?> GetByIdAsync(
+            int id)
         {
-            Booking booking =
-                await _context.Bookings
-                    .Include(x =>
-                        x.ParkingReservation)
+            return _db.Bookings
+                .Include(x => x.Customer)
+                .Include(x => x.Event)
+                .Include(x => x.BookingSeats)
+                    .ThenInclude(x => x.Seat)
+                .Include(x =>
+                    x.ParkingReservation)
                     .ThenInclude(x =>
                         x!.ParkingSlot)
-                    .FirstOrDefaultAsync(x =>
-                        x.BookingId ==
-                            bookingId)
-                ?? throw new KeyNotFoundException(
-                    "Booking not found.");
+                .Include(x => x.Payment)
+                .FirstOrDefaultAsync(x =>
+                    x.BookingId == id);
+        }
 
-            ParkingReservation? reservation =
-                booking.ParkingReservation;
+        public Task<List<Booking>>
+            GetByCustomerAsync(
+                int customerId)
+        {
+            return _db.Bookings
+                .AsNoTracking()
+                .Include(x => x.Customer)
+                .Include(x => x.Event)
+                .Include(x => x.BookingSeats)
+                    .ThenInclude(x => x.Seat)
+                .Include(x =>
+                    x.ParkingReservation)
+                    .ThenInclude(x =>
+                        x!.ParkingSlot)
+                .Where(x =>
+                    x.CustomerId ==
+                        customerId)
+                .OrderByDescending(x =>
+                    x.BookingDate)
+                .ToListAsync();
+        }
 
-            if (reservation == null ||
-                reservation.Status != "Active")
-            {
-                throw new InvalidOperationException(
-                    "No active parking reservation.");
-            }
-
-            reservation.Status =
-                "Released";
-
-            if (reservation.ParkingSlot != null)
-            {
-                reservation.ParkingSlot.Status =
-                    "Available";
-            }
-
-            booking.TotalAmount -=
-                reservation.Fee;
-
-            if (booking.TotalAmount < 0)
-            {
-                booking.TotalAmount = 0;
-            }
-
-            await _context.SaveChangesAsync();
+        public Task<List<Booking>>
+            GetByEventAsync(
+                int eventId)
+        {
+            return _db.Bookings
+                .AsNoTracking()
+                .Include(x => x.Customer)
+                .Include(x => x.Event)
+                .Include(x => x.BookingSeats)
+                    .ThenInclude(x => x.Seat)
+                .Include(x =>
+                    x.ParkingReservation)
+                    .ThenInclude(x =>
+                        x!.ParkingSlot)
+                .Where(x =>
+                    x.EventId == eventId)
+                .OrderByDescending(x =>
+                    x.BookingDate)
+                .ToListAsync();
         }
 
         public async Task CancelAsync(
             Booking booking)
         {
-            booking.Status = "Cancelled";
+            await using var transaction =
+                await _db.Database.BeginTransactionAsync(
+                    IsolationLevel.Serializable);
 
-            foreach (BookingSeat bookingSeat
-                     in booking.BookingSeats)
+            try
             {
-                bookingSeat.Status =
-                    "Released";
+                var existing =
+                    await _db.Bookings
+                        .Include(x =>
+                            x.BookingSeats)
+                        .ThenInclude(x =>
+                            x.Seat)
+                        .Include(x =>
+                            x.ParkingReservation)
+                        .ThenInclude(x =>
+                            x!.ParkingSlot)
+                        .FirstOrDefaultAsync(x =>
+                            x.BookingId ==
+                                booking.BookingId)
+                    ?? throw new KeyNotFoundException(
+                        "Booking not found.");
 
-                if (bookingSeat.Seat != null)
+                if (existing.Status ==
+                    "Cancelled")
                 {
-                    bookingSeat.Seat.Status =
-                        "Available";
+                    return;
                 }
-            }
 
-            if (booking.ParkingReservation != null)
+                existing.Status =
+                    "Cancelled";
+
+                foreach (var bookingSeat
+                         in existing.BookingSeats)
+                {
+                    if (bookingSeat.Status ==
+                        "Active")
+                    {
+                        bookingSeat.Status =
+                            "Released";
+
+                        if (bookingSeat.Seat != null)
+                        {
+                            bookingSeat
+                                .Seat
+                                .Status =
+                                    "Available";
+                        }
+                    }
+                }
+
+                if (existing.ParkingReservation != null &&
+                    existing.ParkingReservation.Status ==
+                        "Active")
+                {
+                    existing
+                        .ParkingReservation
+                        .Status =
+                            "Released";
+
+                    if (existing
+                        .ParkingReservation
+                        .ParkingSlot != null)
+                    {
+                        existing
+                            .ParkingReservation
+                            .ParkingSlot!
+                            .Status =
+                                "Available";
+                    }
+                }
+
+                await _db.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+            }
+            catch
             {
-                booking.ParkingReservation.Status =
-                    "Released";
+                await transaction.RollbackAsync();
 
-                if (booking.ParkingReservation
-                    .ParkingSlot != null)
-                {
-                    booking.ParkingReservation
-                        .ParkingSlot.Status =
-                        "Available";
-                }
+                throw;
             }
-
-            await _context.SaveChangesAsync();
         }
 
-        public async Task UpdateAsync(
+        private static void EnsureEditable(
             Booking booking)
         {
-            _context.Bookings.Update(booking);
+            if (booking.Status != "Pending")
+            {
+                throw new InvalidOperationException(
+                    "Only pending bookings can be modified.");
+            }
 
-            await _context.SaveChangesAsync();
+            if (booking.HoldExpiresAt.HasValue &&
+                booking.HoldExpiresAt.Value <=
+                    DateTime.UtcNow)
+            {
+                throw new InvalidOperationException(
+                    "Booking hold has expired.");
+            }
         }
     }
 }

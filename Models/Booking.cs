@@ -1,4 +1,3 @@
-using EventParkingReservation.Models;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -18,6 +17,9 @@ namespace EventParkingReservation.Models
         public int EventId { get; set; }
 
         public DateTime BookingDate { get; set; } = DateTime.UtcNow;
+
+        // 15 minute reservation hold
+        public DateTime? HoldExpiresAt { get; set; }
 
         [Required]
         [MaxLength(30)]
