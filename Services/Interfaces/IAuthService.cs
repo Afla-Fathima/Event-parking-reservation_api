@@ -1,6 +1,23 @@
-﻿namespace Event_Parking_Reservation.Services.Interfaces
+using EventParkingReservation.DTOs.Auth;
+using EventParkingReservation.DTOs.Customer;
+
+namespace EventParkingReservation.Services.Interfaces
 {
     public interface IAuthService
     {
+        Task<CustomerResponseDto> RegisterAsync(
+            RegisterDto dto);
+
+        Task<LoginResponseDto> LoginAsync(
+            LoginRequestDto dto);
+
+        Task<bool> CheckEmailAsync(
+            string email);
+
+        Task<string> ForgotPasswordAsync(
+            ForgotPasswordDto dto);
+
+        Task ResetPasswordAsync(
+            ResetPasswordDto dto);
     }
 }

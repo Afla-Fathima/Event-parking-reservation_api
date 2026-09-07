@@ -1,6 +1,6 @@
-﻿namespace Event_Parking_Reservation.DTOs.Seat
+namespace EventParkingReservation.DTOs.Seat
 {
-    public class UpdateSeatDto
+    public class UpdateSeatDto : CreateSeatDto
     {
     }
 }
