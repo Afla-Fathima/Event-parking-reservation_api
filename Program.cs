@@ -3,7 +3,6 @@ using EventParkingReservation.Data;
 using EventParkingReservation.Middleware;
 using EventParkingReservation.Repositories.Implementations;
 using EventParkingReservation.Repositories.Interfaces;
-using EventParkingReservation.Services;
 using EventParkingReservation.Services.Implementations;
 using EventParkingReservation.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
