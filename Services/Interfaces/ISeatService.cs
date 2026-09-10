@@ -4,8 +4,7 @@ namespace EventParkingReservation.Services.Interfaces
 {
     public interface ISeatService
     {
-        Task<List<SeatDto>> GetByEventIdAsync(
-            int eventId);
+        Task<List<SeatDto>> GetByEventIdAsync(int eventId);
 
         Task<SeatDto> CreateAsync(
             int eventId,
@@ -19,5 +18,7 @@ namespace EventParkingReservation.Services.Interfaces
         Task DeleteAsync(
             int eventId,
             int seatId);
+
+        Task<int> GenerateDefaultSeatsAsync(int eventId);
     }
 }

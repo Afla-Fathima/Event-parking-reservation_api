@@ -18,7 +18,8 @@ namespace EventParkingReservation.Controllers
             _service = service;
         }
 
-        // Admin + Customer can see seat map
+        // ADMIN + CUSTOMER
+        // GET api/events/1/seats
         [HttpGet]
         [Authorize(Roles = "Admin,Customer")]
         public async Task<IActionResult> GetMap(
@@ -26,8 +27,11 @@ namespace EventParkingReservation.Controllers
         {
             try
             {
-                return Ok(
-                    await _service.GetByEventIdAsync(eventId));
+                var seats =
+                    await _service
+                        .GetByEventIdAsync(eventId);
+
+                return Ok(seats);
             }
             catch (KeyNotFoundException ex)
             {
@@ -39,22 +43,25 @@ namespace EventParkingReservation.Controllers
         }
 
         // ADMIN ONLY
+        // POST api/events/1/seats
         [HttpPost]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Create(
             int eventId,
-            CreateSeatDto dto)
+            [FromBody] CreateSeatDto dto)
         {
             try
             {
                 var result =
                     await _service.CreateAsync(
                         eventId,
-                        dto);
+                        dto
+                    );
 
                 return Created(
                     $"/api/events/{eventId}/seats/{result.SeatId}",
-                    result);
+                    result
+                );
             }
             catch (KeyNotFoundException ex)
             {
@@ -72,20 +79,69 @@ namespace EventParkingReservation.Controllers
             }
         }
 
+        // ADMIN ONLY
+        // ONE CLICK -> GENERATE 200 SEATS
+        // POST api/events/1/seats/generate
+        [HttpPost("generate")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Generate(
+            int eventId)
+        {
+            try
+            {
+                var createdCount =
+                    await _service
+                        .GenerateDefaultSeatsAsync(
+                            eventId
+                        );
+
+                return Ok(new
+                {
+                    message =
+                        $"{createdCount} seats generated successfully.",
+
+                    createdSeats =
+                        createdCount,
+
+                    maximumSeats =
+                        200
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new
+                {
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new
+                {
+                    message = ex.Message
+                });
+            }
+        }
+
+        // ADMIN ONLY
+        // PUT api/events/1/seats/5
         [HttpPut("{seatId:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Update(
             int eventId,
             int seatId,
-            UpdateSeatDto dto)
+            [FromBody] UpdateSeatDto dto)
         {
             try
             {
-                return Ok(
+                var result =
                     await _service.UpdateAsync(
                         eventId,
                         seatId,
-                        dto));
+                        dto
+                    );
+
+                return Ok(result);
             }
             catch (KeyNotFoundException ex)
             {
@@ -103,6 +159,8 @@ namespace EventParkingReservation.Controllers
             }
         }
 
+        // ADMIN ONLY
+        // DELETE api/events/1/seats/5
         [HttpDelete("{seatId:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Delete(
@@ -113,7 +171,8 @@ namespace EventParkingReservation.Controllers
             {
                 await _service.DeleteAsync(
                     eventId,
-                    seatId);
+                    seatId
+                );
 
                 return NoContent();
             }
