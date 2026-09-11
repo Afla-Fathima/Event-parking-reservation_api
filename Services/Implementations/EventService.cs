@@ -111,13 +111,16 @@ namespace EventParkingReservation.Services.Implementations
                 dto,
                 id);
 
-            bool hasActiveBookings =
-                await _repo
-                    .HasActiveBookingsAsync(id);
+            bool hasAnyBookings =
+          await _repo
+         .HasAnyBookingsAsync(
+             id);
 
-            if (hasActiveBookings &&
+            if (
+                hasAnyBookings &&
                 dto.TicketPrice !=
-                    entity.TicketPrice)
+                    entity.TicketPrice
+            )
             {
                 throw new InvalidOperationException(
                     "Ticket price cannot be changed after bookings exist.");

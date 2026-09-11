@@ -161,6 +161,15 @@ namespace EventParkingReservation.Repositories.Implementations
                     x.Status !=
                         "Expired");
         }
+        public Task<bool>
+    HasAnyBookingsAsync(
+        int eventId)
+        {
+            return _db.Bookings
+                .AnyAsync(x =>
+                    x.EventId ==
+                        eventId);
+        }
 
         public Task<int>
             BookedSeatCountAsync(

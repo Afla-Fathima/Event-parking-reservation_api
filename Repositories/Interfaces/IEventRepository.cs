@@ -29,7 +29,16 @@ namespace EventParkingReservation.Repositories.Interfaces
             TimeOnly end,
             int? excludeEventId = null);
 
+        // Existing:
+        // Used when checking whether an event
+        // has CURRENT active bookings.
         Task<bool> HasActiveBookingsAsync(
+            int eventId);
+
+        // NEW:
+        // Used to lock ticket price once
+        // ANY booking history exists.
+        Task<bool> HasAnyBookingsAsync(
             int eventId);
 
         Task<int> BookedSeatCountAsync(
