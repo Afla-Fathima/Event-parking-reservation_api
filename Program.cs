@@ -35,268 +35,274 @@ string connectionString =
     ?? throw new InvalidOperationException(
         "DefaultConnection is missing.");
 
-builder.Services
-    .AddDbContext<ApplicationDbContext>(
-        options =>
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+{
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        sqlOptions =>
         {
-            options.UseSqlServer(
-                connectionString);
+            sqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorNumbersToAdd: null
+            );
         });
+});
 
 // =====================================================
 // CORS - ANGULAR
 // =====================================================
 
 builder.Services.AddCors(options =>
-{
-    options.AddPolicy(
-        "AngularFrontend",
-        policy =>
-        {
-            policy
-                .WithOrigins(
-                    "http://localhost:4200")
-                .AllowAnyHeader()
-                .AllowAnyMethod();
-        });
-});
-
-// =====================================================
-// REPOSITORIES
-// =====================================================
-
-builder.Services.AddScoped<
-    IAuthRepository,
-    AuthRepository>();
-
-builder.Services.AddScoped<
-    ICustomerRepository,
-    CustomerRepository>();
-
-builder.Services.AddScoped<
-    IVenueRepository,
-    VenueRepository>();
-
-builder.Services.AddScoped<
-    ICategoryRepository,
-    CategoryRepository>();
-
-builder.Services.AddScoped<
-    IEventRepository,
-    EventRepository>();
-
-builder.Services.AddScoped<
-    ISeatRepository,
-    SeatRepository>();
-
-builder.Services.AddScoped<
-    IParkingRepository,
-    ParkingRepository>();
-
-builder.Services.AddScoped<
-    IBookingRepository,
-    BookingRepository>();
-
-builder.Services.AddScoped<
-    IPaymentRepository,
-    PaymentRepository>();
-
-builder.Services.AddScoped<
-    INotificationRepository,
-    NotificationRepository>();
-
-builder.Services.AddScoped<
-    IDashboardRepository,
-    DashboardRepository>();
-
-// =====================================================
-// SERVICES
-// =====================================================
-
-builder.Services.AddScoped<
-    IAuthService,
-    AuthService>();
-
-builder.Services.AddScoped<
-    ICustomerService,
-    CustomerService>();
-
-builder.Services.AddScoped<
-    IVenueService,
-    VenueService>();
-
-builder.Services.AddScoped<
-    ICategoryService,
-    CategoryService>();
-
-builder.Services.AddScoped<
-    IEventService,
-    EventService>();
-
-builder.Services.AddScoped<
-    ISeatService,
-    SeatService>();
-
-builder.Services.AddScoped<
-    IParkingService,
-    ParkingService>();
-
-builder.Services.AddScoped<
-    IBookingService,
-    BookingService>();
-
-builder.Services.AddScoped<
-    IPaymentService,
-    PaymentService>();
-
-builder.Services.AddScoped<
-    INotificationService,
-    NotificationService>();
-
-builder.Services.AddScoped<
-    IDashboardService,
-    DashboardService>();
-
-// =====================================================
-// BACKGROUND WORKER
-// =====================================================
-
-builder.Services.AddHostedService<
-    BookingExpiryService>();
-
-// =====================================================
-// JWT SETTINGS
-// =====================================================
-
-string jwtKey =
-    builder.Configuration["Jwt:Key"]
-    ?? throw new InvalidOperationException(
-        "JWT Key is missing.");
-
-string jwtIssuer =
-    builder.Configuration["Jwt:Issuer"]
-    ?? throw new InvalidOperationException(
-        "JWT Issuer is missing.");
-
-string jwtAudience =
-    builder.Configuration["Jwt:Audience"]
-    ?? throw new InvalidOperationException(
-        "JWT Audience is missing.");
-
-// =====================================================
-// AUTHENTICATION
-// =====================================================
-
-builder.Services
-    .AddAuthentication(options =>
     {
-        options.DefaultAuthenticateScheme =
-            JwtBearerDefaults
-                .AuthenticationScheme;
-
-        options.DefaultChallengeScheme =
-            JwtBearerDefaults
-                .AuthenticationScheme;
-
-        options.DefaultScheme =
-            JwtBearerDefaults
-                .AuthenticationScheme;
-    })
-    .AddJwtBearer(options =>
-    {
-        options.RequireHttpsMetadata =
-            false;
-
-        options.SaveToken =
-            true;
-
-        options.TokenValidationParameters =
-            new TokenValidationParameters
+        options.AddPolicy(
+            "AngularFrontend",
+            policy =>
             {
-                ValidateIssuer =
-                    true,
-
-                ValidateAudience =
-                    true,
-
-                ValidateLifetime =
-                    true,
-
-                ValidateIssuerSigningKey =
-                    true,
-
-                ValidIssuer =
-                    jwtIssuer,
-
-                ValidAudience =
-                    jwtAudience,
-
-                IssuerSigningKey =
-                    new SymmetricSecurityKey(
-                        Encoding.UTF8.GetBytes(
-                            jwtKey)),
-
-                RoleClaimType =
-                    System.Security.Claims
-                        .ClaimTypes.Role,
-
-                NameClaimType =
-                    System.Security.Claims
-                        .ClaimTypes.Name,
-
-                ClockSkew =
-                    TimeSpan.Zero
-            };
+                policy
+                    .WithOrigins(
+                        "http://localhost:4200")
+                    .AllowAnyHeader()
+                    .AllowAnyMethod();
+            });
     });
 
-builder.Services.AddAuthorization();
+            // =====================================================
+            // REPOSITORIES
+            // =====================================================
 
-// =====================================================
-// SWAGGER + JWT AUTHORIZE BUTTON
-// =====================================================
+            builder.Services.AddScoped<
+                IAuthRepository,
+                AuthRepository>();
 
-builder.Services.AddSwaggerGen(options =>
-{
-    options.SwaggerDoc(
-        "v1",
-        new OpenApiInfo
-        {
-            Title =
-                "Event Parking Reservation API",
+            builder.Services.AddScoped<
+                ICustomerRepository,
+                CustomerRepository>();
 
-            Version =
-                "v1",
+            builder.Services.AddScoped<
+                IVenueRepository,
+                VenueRepository>();
 
-            Description =
-                "Event and Parking Reservation System API"
-        });
+            builder.Services.AddScoped<
+                ICategoryRepository,
+                CategoryRepository>();
 
-    options.AddSecurityDefinition(
-        "Bearer",
-        new OpenApiSecurityScheme
-        {
-            Name =
-                "Authorization",
+            builder.Services.AddScoped<
+                IEventRepository,
+                EventRepository>();
 
-            Type =
-                SecuritySchemeType.Http,
+            builder.Services.AddScoped<
+                ISeatRepository,
+                SeatRepository>();
 
-            Scheme =
-                "bearer",
+            builder.Services.AddScoped<
+                IParkingRepository,
+                ParkingRepository>();
 
-            BearerFormat =
-                "JWT",
+            builder.Services.AddScoped<
+                IBookingRepository,
+                BookingRepository>();
 
-            In =
-                ParameterLocation.Header,
+            builder.Services.AddScoped<
+                IPaymentRepository,
+                PaymentRepository>();
 
-            Description =
-                "Enter the JWT token generated by /api/Auth/login."
-        });
+            builder.Services.AddScoped<
+                INotificationRepository,
+                NotificationRepository>();
 
-    options.AddSecurityRequirement(
-        new OpenApiSecurityRequirement
-        {
+            builder.Services.AddScoped<
+                IDashboardRepository,
+                DashboardRepository>();
+
+            // =====================================================
+            // SERVICES
+            // =====================================================
+
+            builder.Services.AddScoped<
+                IAuthService,
+                AuthService>();
+
+            builder.Services.AddScoped<
+                ICustomerService,
+                CustomerService>();
+
+            builder.Services.AddScoped<
+                IVenueService,
+                VenueService>();
+
+            builder.Services.AddScoped<
+                ICategoryService,
+                CategoryService>();
+
+            builder.Services.AddScoped<
+                IEventService,
+                EventService>();
+
+            builder.Services.AddScoped<
+                ISeatService,
+                SeatService>();
+
+            builder.Services.AddScoped<
+                IParkingService,
+                ParkingService>();
+
+            builder.Services.AddScoped<
+                IBookingService,
+                BookingService>();
+
+            builder.Services.AddScoped<
+                IPaymentService,
+                PaymentService>();
+
+            builder.Services.AddScoped<
+                INotificationService,
+                NotificationService>();
+
+            builder.Services.AddScoped<
+                IDashboardService,
+                DashboardService>();
+
+            // =====================================================
+            // BACKGROUND WORKER
+            // =====================================================
+
+            builder.Services.AddHostedService<
+                BookingExpiryService>();
+
+            // =====================================================
+            // JWT SETTINGS
+            // =====================================================
+
+            string jwtKey =
+                builder.Configuration["Jwt:Key"]
+                ?? throw new InvalidOperationException(
+                    "JWT Key is missing.");
+
+            string jwtIssuer =
+                builder.Configuration["Jwt:Issuer"]
+                ?? throw new InvalidOperationException(
+                    "JWT Issuer is missing.");
+
+            string jwtAudience =
+                builder.Configuration["Jwt:Audience"]
+                ?? throw new InvalidOperationException(
+                    "JWT Audience is missing.");
+
+            // =====================================================
+            // AUTHENTICATION
+            // =====================================================
+
+            builder.Services
+                .AddAuthentication(options =>
+                {
+                    options.DefaultAuthenticateScheme =
+                        JwtBearerDefaults
+                            .AuthenticationScheme;
+
+                    options.DefaultChallengeScheme =
+                        JwtBearerDefaults
+                            .AuthenticationScheme;
+
+                    options.DefaultScheme =
+                        JwtBearerDefaults
+                            .AuthenticationScheme;
+                })
+                .AddJwtBearer(options =>
+                {
+                    options.RequireHttpsMetadata =
+                        false;
+
+                    options.SaveToken =
+                        true;
+
+                    options.TokenValidationParameters =
+                        new TokenValidationParameters
+                        {
+                            ValidateIssuer =
+                                true,
+
+                            ValidateAudience =
+                                true,
+
+                            ValidateLifetime =
+                                true,
+
+                            ValidateIssuerSigningKey =
+                                true,
+
+                            ValidIssuer =
+                                jwtIssuer,
+
+                            ValidAudience =
+                                jwtAudience,
+
+                            IssuerSigningKey =
+                                new SymmetricSecurityKey(
+                                    Encoding.UTF8.GetBytes(
+                                        jwtKey)),
+
+                            RoleClaimType =
+                                System.Security.Claims
+                                    .ClaimTypes.Role,
+
+                            NameClaimType =
+                                System.Security.Claims
+                                    .ClaimTypes.Name,
+
+                            ClockSkew =
+                                TimeSpan.Zero
+                        };
+                });
+
+            builder.Services.AddAuthorization();
+
+            // =====================================================
+            // SWAGGER + JWT AUTHORIZE BUTTON
+            // =====================================================
+
+            builder.Services.AddSwaggerGen(options =>
+            {
+                options.SwaggerDoc(
+                    "v1",
+                    new OpenApiInfo
+                    {
+                        Title =
+                            "Event Parking Reservation API",
+
+                        Version =
+                            "v1",
+
+                        Description =
+                            "Event and Parking Reservation System API"
+                    });
+
+                options.AddSecurityDefinition(
+                    "Bearer",
+                    new OpenApiSecurityScheme
+                    {
+                        Name =
+                            "Authorization",
+
+                        Type =
+                            SecuritySchemeType.Http,
+
+                        Scheme =
+                            "bearer",
+
+                        BearerFormat =
+                            "JWT",
+
+                        In =
+                            ParameterLocation.Header,
+
+                        Description =
+                            "Enter the JWT token generated by /api/Auth/login."
+                    });
+
+                options.AddSecurityRequirement(
+                    new OpenApiSecurityRequirement
+                    {
             {
                 new OpenApiSecurityScheme
                 {
@@ -313,68 +319,69 @@ builder.Services.AddSwaggerGen(options =>
 
                 Array.Empty<string>()
             }
-        });
-});
+                    });
+            });
 
-// =====================================================
-// BUILD
-// =====================================================
+            // =====================================================
+            // BUILD
+            // =====================================================
 
-var app =
-    builder.Build();
+            var app =
+                builder.Build();
 
-// =====================================================
-// GLOBAL EXCEPTION HANDLER
-// =====================================================
+            // =====================================================
+            // GLOBAL EXCEPTION HANDLER
+            // =====================================================
 
-app.UseMiddleware<
-    ExceptionMiddleware>();
+            app.UseMiddleware<
+                ExceptionMiddleware>();
 
-// =====================================================
-// SWAGGER
-// =====================================================
+            // =====================================================
+            // SWAGGER
+            // =====================================================
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
+            if (app.Environment.IsDevelopment())
+            {
+                app.UseSwagger();
 
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint(
-            "/swagger/v1/swagger.json",
-            "Event Parking Reservation API v1");
+                app.UseSwaggerUI(options =>
+                {
+                    options.SwaggerEndpoint(
+                        "/swagger/v1/swagger.json",
+                        "Event Parking Reservation API v1");
 
-        options.DocumentTitle =
-            "Event Parking Reservation API";
-    });
-}
+                    options.DocumentTitle =
+                        "Event Parking Reservation API";
+                });
+            }
 
-// =====================================================
-// HTTP PIPELINE
-// =====================================================
+            // =====================================================
+            // HTTP PIPELINE
+            // =====================================================
 
-app.UseHttpsRedirection();
+            app.UseHttpsRedirection();
 
-app.UseCors(
-    "AngularFrontend");
+            app.UseCors(
+                "AngularFrontend");
 
-// IMPORTANT:
-// Authentication before Authorization.
-app.UseAuthentication();
+            // IMPORTANT:
+            // Authentication before Authorization.
+            app.UseAuthentication();
 
-app.UseAuthorization();
+            app.UseAuthorization();
 
-app.MapControllers();
+            app.MapControllers();
 
-if (app.Environment.IsDevelopment())
-{
-    using var scope = app.Services.CreateScope();
+            if (app.Environment.IsDevelopment())
+            {
+                using var scope = app.Services.CreateScope();
 
-    var dbContext =
-        scope.ServiceProvider
-            .GetRequiredService<ApplicationDbContext>();
+                var dbContext =
+                    scope.ServiceProvider
+                        .GetRequiredService<ApplicationDbContext>();
 
-    await AdminSeeder.SeedAsync(dbContext);
-}
+                await AdminSeeder.SeedAsync(dbContext);
+            }
 
-app.Run();
+        app.Run();
+            
