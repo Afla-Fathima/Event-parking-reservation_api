@@ -51,47 +51,48 @@ namespace EventParkingReservation.Repositories.Implementations
         }
 
         public async Task<Payment> CreateAsync(
-            Payment payment,
-            Booking booking)
+      Payment payment,
+      Booking booking)
         {
-            await using var transaction =
-                await _context.Database
-                    .BeginTransactionAsync();
+            var strategy =
+                _context.Database.CreateExecutionStrategy();
 
-            try
+            await strategy.ExecuteAsync(async () =>
             {
-                bool exists =
-                    await _context.Payments
-                        .AnyAsync(x =>
-                            x.BookingId ==
-                                booking.BookingId);
+                await using var transaction =
+                    await _context.Database.BeginTransactionAsync();
 
-                if (exists)
+                try
                 {
-                    throw new InvalidOperationException(
-                        "Payment already exists for this booking.");
+                    bool exists =
+                        await _context.Payments
+                        .AnyAsync(x =>
+                            x.BookingId == booking.BookingId);
+
+                    if (exists)
+                    {
+                        throw new InvalidOperationException(
+                            "Payment already exists for this booking.");
+                    }
+
+                    _context.Payments.Add(payment);
+
+                    booking.PaymentStatus = "Completed";
+                    booking.Status = "Confirmed";
+
+                    await _context.SaveChangesAsync();
+
+                    await transaction.CommitAsync();
                 }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
 
-                _context.Payments.Add(payment);
-
-                booking.PaymentStatus =
-                    "Completed";
-
-                booking.Status =
-                    "Confirmed";
-
-                await _context.SaveChangesAsync();
-
-                await transaction.CommitAsync();
-
-                return payment;
-            }
-            catch
-            {
-                await transaction.RollbackAsync();
-
-                throw;
-            }
+            return payment;
         }
     }
 }
+    

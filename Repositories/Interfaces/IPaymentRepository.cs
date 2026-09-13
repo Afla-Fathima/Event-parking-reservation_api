@@ -11,7 +11,7 @@ namespace EventParkingReservation.Repositories.Interfaces
         Task<IEnumerable<Payment>> GetByCustomerAsync(int customerId);
 
         Task<Payment> CreateAsync(
-            Payment payment,
-            Booking booking);
+          Payment payment,
+          Booking booking);
     }
 }
